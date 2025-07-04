@@ -185,61 +185,18 @@ export const createOrUpdateStudentProfile = async (
   resumeFile?: File | null
 ): Promise<StudentProfileData> => {
   try {
-    console.log("API: createOrUpdateStudentProfile called with:", { profileData, profilePictureFile, resumeFile });
-    console.log("API: profilePictureFile type:", typeof profilePictureFile);
-    console.log("API: resumeFile type:", typeof resumeFile);
-    console.log("API: profilePictureFile is null:", profilePictureFile === null);
-    console.log("API: resumeFile is null:", resumeFile === null);
-    console.log("API: profilePictureFile is undefined:", profilePictureFile === undefined);
-    console.log("API: resumeFile is undefined:", resumeFile === undefined);
-    
-    // Check if we have actual files to upload
-    const hasProfilePicture = profilePictureFile && profilePictureFile instanceof File && profilePictureFile.size > 0;
-    const hasResume = resumeFile && resumeFile instanceof File && resumeFile.size > 0;
-    
-    console.log("API: hasProfilePicture:", hasProfilePicture);
-    console.log("API: hasResume:", hasResume);
-    
-    if (hasProfilePicture || hasResume) {
-      console.log("API: Using FormData path");
-      // Use FormData for file upload
-    const formData = new FormData();
-    formData.append('profileData', JSON.stringify(profileData));
-      if (hasProfilePicture) {
-      formData.append('profilePicture', profilePictureFile);
-    }
-      if (hasResume) {
-      formData.append('resume', resumeFile);
-    }
-      console.log("API: Sending FormData request");
-    const response = await api.post('/api/student/profile', formData);
-      console.log("API: FormData response received:", response.data);
-      return response.data;
-    } else {
-      console.log("API: Using JSON path");
-      // Use JSON for data-only update
-      console.log("API: Sending JSON request with data:", profileData);
-      
-      // Clean the data to remove undefined values
-      const cleanData = Object.fromEntries(
-        Object.entries(profileData).filter(([_, value]) => value !== undefined)
-      );
-      
-      console.log("API: Cleaned data:", cleanData);
-      
-      const response = await api.post('/api/student/profile/json', cleanData, {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      console.log("API: JSON response received:", response.data);
+    // Only JSON path is needed for now
+    const cleanData = Object.fromEntries(
+      Object.entries(profileData).filter(([_, value]) => value !== undefined)
+    );
+    const response = await api.post('/api/profile', cleanData, {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
     return response.data;
-    }
   } catch (error: any) {
-    console.error("API: Error in createOrUpdateStudentProfile:", error);
-    console.error("API: Error response:", error.response?.data);
-    console.error("API: Error status:", error.response?.status);
     throw handleProfileApiError(error);
   }
 };
@@ -247,7 +204,7 @@ export const createOrUpdateStudentProfile = async (
 // 2. Get Current Student Profile
 export const getCurrentStudentProfile = async (): Promise<StudentProfileData> => {
   try {
-    const response = await api.get('/api/student/profile');
+    const response = await api.get('/api/profile');
     return response.data;
   } catch (error: any) {
     throw handleProfileApiError(error);

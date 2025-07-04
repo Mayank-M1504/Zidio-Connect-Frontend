@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   User,
@@ -21,6 +21,72 @@ import {
   Eye,
   Shield,
 } from "lucide-react"
+import { createOrUpdateStudentProfile, getCurrentStudentProfile, StudentProfileData } from '../../../lib/api';
+
+// Utility to decode JWT and extract email
+function getEmailFromJWT() {
+  if (typeof window === 'undefined') return '';
+  const token = localStorage.getItem('token');
+  if (!token) return '';
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    const { sub, email } = JSON.parse(jsonPayload);
+    // Some JWTs use 'sub' for email, some use 'email'
+    return email || sub || '';
+  } catch {
+    return '';
+  }
+}
+
+type ProfileType = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  college: string;
+  course: string;
+  yearOfStudy: string;
+  gpa: string;
+  expectedGraduation: string;
+  academicAchievements: string;
+  linkedinProfile: string;
+  githubProfile: string;
+  portfolioWebsite: string;
+  dateOfBirth: string;
+  address: string;
+  bio: string;
+  careerGoals: string;
+  skills: string[];
+  interests: string[];
+  preferredJobRoles: string[];
+  preferredLocations: string[];
+};
+
+const initialProfile: ProfileType = {
+  firstName: '',
+  lastName: '',
+  phone: '',
+  college: '',
+  course: '',
+  yearOfStudy: '',
+  gpa: '',
+  expectedGraduation: '',
+  academicAchievements: '',
+  linkedinProfile: '',
+  githubProfile: '',
+  portfolioWebsite: '',
+  dateOfBirth: '',
+  address: '',
+  bio: '',
+  careerGoals: '',
+  skills: [],
+  interests: [],
+  preferredJobRoles: [],
+  preferredLocations: [],
+};
 
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("jobs")
@@ -65,11 +131,71 @@ export default function StudentDashboard() {
   const [marksheetFile, setMarksheetFile] = useState<File | null>(null)
   const [identityFile, setIdentityFile] = useState<File | null>(null)
 
+  const [jwtEmail, setJwtEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  const [profile, setProfile] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    college: '',
+    course: '',
+    yearOfStudy: '',
+    gpa: '',
+    expectedGraduation: '',
+    academicAchievements: '',
+    linkedinProfile: '',
+    githubProfile: '',
+    portfolioWebsite: '',
+    dateOfBirth: '',
+    address: '',
+    bio: '',
+    careerGoals: '',
+    skills: [],
+    interests: [],
+    preferredJobRoles: [],
+    preferredLocations: [],
+  });
+
+  // Fetch profile on mount
+  useEffect(() => {
+    setJwtEmail(getEmailFromJWT());
+    getCurrentStudentProfile().then((data: StudentProfileData) => {
+      const newProfile = {
+        ...initialProfile,
+        ...data,
+        skills: data.skills || [],
+        interests: data.interests || [],
+        preferredJobRoles: data.preferredJobRoles || [],
+        preferredLocations: data.preferredLocations || [],
+      };
+      setProfile(newProfile);
+    }).catch(() => {});
+    // eslint-disable-next-line
+  }, []);
+
   // const filteredJobs = [];
 
   const handleLogout = () => {
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     window.location.href = '/';
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccess('');
+    setError('');
+    try {
+      await createOrUpdateStudentProfile({ ...profile, email: jwtEmail });
+      setSuccess('Profile updated successfully!');
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -162,7 +288,10 @@ export default function StudentDashboard() {
               <div className="bg-white rounded-xl shadow-sm p-6 animate-in fade-in slide-in-from-right duration-300">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">My Profile</h2>
 
-                <form className="space-y-8">
+                {success && <div className="text-green-600 font-medium mb-4">{success}</div>}
+                {error && <div className="text-red-600 font-medium mb-4">{error}</div>}
+
+                <form className="space-y-8" onSubmit={handleProfileSubmit}>
                   {/* Basic Information Section */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Basic Information</h3>
@@ -171,6 +300,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                         <input
                           type="text"
+                          value={profile.firstName}
+                          onChange={e => setProfile({ ...profile, firstName: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -178,6 +309,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                         <input
                           type="text"
+                          value={profile.lastName}
+                          onChange={e => setProfile({ ...profile, lastName: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -185,13 +318,18 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                         <input
                           type="email"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={jwtEmail}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+                          readOnly
+                          disabled
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
                         <input
                           type="tel"
+                          value={profile.phone}
+                          onChange={e => setProfile({ ...profile, phone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -200,6 +338,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">College/University</label>
                         <input
                           type="text"
+                          value={profile.college}
+                          onChange={e => setProfile({ ...profile, college: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -214,12 +354,16 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Course/Major</label>
                         <input
                           type="text"
+                          value={profile.course}
+                          onChange={e => setProfile({ ...profile, course: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Year of Study</label>
                         <select
+                          value={profile.yearOfStudy}
+                          onChange={e => setProfile({ ...profile, yearOfStudy: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option>1st Year</option>
@@ -234,6 +378,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">GPA/CGPA</label>
                         <input
                           type="text"
+                          value={profile.gpa}
+                          onChange={e => setProfile({ ...profile, gpa: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="e.g., 8.5 or 3.8"
                         />
@@ -242,6 +388,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Expected Graduation Date</label>
                         <input
                           type="date"
+                          value={profile.expectedGraduation}
+                          onChange={e => setProfile({ ...profile, expectedGraduation: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -249,6 +397,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Academic Achievements</label>
                         <textarea
                           rows={3}
+                          value={profile.academicAchievements}
+                          onChange={e => setProfile({ ...profile, academicAchievements: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="List your academic achievements, awards, honors, etc."
                         />
@@ -262,23 +412,12 @@ export default function StudentDashboard() {
                     <div className="space-y-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Skills</label>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {/* studentProfile.skills.map((skill, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
-                            >
-                              {skill}
-                              <button type="button" className="ml-2 text-blue-600 hover:text-blue-800">
-                                ×
-                              </button>
-                            </span>
-                          )) */}
-                        </div>
                         <input
                           type="text"
+                          value={profile.skills.join(', ')}
+                          onChange={e => setProfile({ ...profile, skills: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Add a skill and press Enter"
+                          placeholder="e.g. Java, Python, React"
                         />
                       </div>
                       {/* Resume upload removed from here */}
@@ -287,6 +426,8 @@ export default function StudentDashboard() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn Profile</label>
                           <input
                             type="url"
+                            value={profile.linkedinProfile}
+                            onChange={e => setProfile({ ...profile, linkedinProfile: e.target.value })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="https://linkedin.com/in/yourprofile"
                           />
@@ -295,6 +436,8 @@ export default function StudentDashboard() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">GitHub Profile</label>
                           <input
                             type="url"
+                            value={profile.githubProfile}
+                            onChange={e => setProfile({ ...profile, githubProfile: e.target.value })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="https://github.com/yourusername"
                           />
@@ -304,6 +447,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Portfolio Website</label>
                         <input
                           type="url"
+                          value={profile.portfolioWebsite}
+                          onChange={e => setProfile({ ...profile, portfolioWebsite: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="https://yourportfolio.com"
                         />
@@ -319,6 +464,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
                         <input
                           type="date"
+                          value={profile.dateOfBirth}
+                          onChange={e => setProfile({ ...profile, dateOfBirth: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -326,6 +473,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
                         <input
                           type="text"
+                          value={profile.address}
+                          onChange={e => setProfile({ ...profile, address: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -333,27 +482,18 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Bio/About Me</label>
                         <textarea
                           rows={4}
+                          value={profile.bio}
+                          onChange={e => setProfile({ ...profile, bio: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Tell us about yourself, your interests, and what makes you unique..."
                         />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Interests</label>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {/* studentProfile.interests.map((interest, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium"
-                            >
-                              {interest}
-                              <button type="button" className="ml-2 text-green-600 hover:text-green-800">
-                                ×
-                              </button>
-                            </span>
-                          )) */}
-                        </div>
                         <input
                           type="text"
+                          value={profile.interests.join(', ')}
+                          onChange={e => setProfile({ ...profile, interests: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Add an interest and press Enter"
                         />
@@ -369,6 +509,8 @@ export default function StudentDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Career Goals</label>
                         <textarea
                           rows={3}
+                          value={profile.careerGoals}
+                          onChange={e => setProfile({ ...profile, careerGoals: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Describe your career aspirations and long-term goals..."
                         />
@@ -376,21 +518,10 @@ export default function StudentDashboard() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Job Roles</label>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {/* studentProfile.preferredJobRoles.map((role, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium"
-                            >
-                              {role}
-                              <button type="button" className="ml-2 text-purple-600 hover:text-purple-800">
-                                ×
-                              </button>
-                            </span>
-                          )) */}
-                        </div>
                         <input
                           type="text"
+                          value={profile.preferredJobRoles.join(', ')}
+                          onChange={e => setProfile({ ...profile, preferredJobRoles: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Add a preferred job role and press Enter"
                         />
@@ -398,55 +529,24 @@ export default function StudentDashboard() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Locations</label>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {/* studentProfile.preferredLocations.map((location, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-medium"
-                            >
-                              {location}
-                              <button type="button" className="ml-2 text-orange-600 hover:text-orange-800">
-                                ×
-                              </button>
-                            </span>
-                          )) */}
-                        </div>
                         <input
                           type="text"
+                          value={profile.preferredLocations.join(', ')}
+                          onChange={e => setProfile({ ...profile, preferredLocations: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Add a preferred location and press Enter"
                         />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Work Authorization Status
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option>Citizen</option>
-                          <option>Permanent Resident</option>
-                          <option>Work Visa</option>
-                          <option>Student Visa</option>
-                          <option>Other</option>
-                        </select>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex justify-end space-x-4 pt-6 border-t">
                     <button
-                      type="button"
-                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
                       type="submit"
                       className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                      disabled={loading}
                     >
-                      Update Profile
+                      {loading ? 'Saving...' : 'Edit Profile'}
                     </button>
                   </div>
                 </form>
@@ -768,7 +868,7 @@ export default function StudentDashboard() {
                         {job.requirements.map((req, index) => (
                           <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
                             {req}
-                  </span>
+                          </span>
                         ))}
                       </div>
 
@@ -805,7 +905,7 @@ export default function StudentDashboard() {
                           {getStatusIcon(app.status)}
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.statusColor}`}>
                             {app.status}
-                  </span>
+                          </span>
                         </div>
                       </div>
                     </div>
