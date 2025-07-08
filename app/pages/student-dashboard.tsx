@@ -20,16 +20,50 @@ import {
   AlertCircle,
   Eye,
 } from "lucide-react"
+import { useRef } from "react"
 
 export default function StudentDashboard() {
+  console.log("StudentDashboard component loaded");
   const [activeTab, setActiveTab] = useState("jobs")
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")
   const router = useRouter()
+  const [profilePicture, setProfilePicture] = useState(studentProfile.profilePicture)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
 
   const handleLogout = () => {
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     window.location.href = '/';
+  }
+
+  // Minimal robust upload handler
+  const handleProfilePicChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) {
+      console.log('No file selected')
+      return
+    }
+    setUploading(true)
+    console.log('Uploading file:', file)
+    const formData = new FormData()
+    formData.append("file", file)
+    try {
+      const res = await fetch("/api/profile/upload-photo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      })
+      const data = await res.json()
+      console.log('Upload response:', data)
+      if (data.profilePictureUrl) {
+        setProfilePicture(data.profilePictureUrl)
+      }
+    } catch (err) {
+      console.error('Upload error:', err)
+    } finally {
+      setUploading(false)
+    }
   }
 
   // Dummy data
@@ -171,8 +205,19 @@ export default function StudentDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">Z</span>
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center cursor-pointer" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+                {profilePicture ? (
+                  <img src={profilePicture} alt="Profile" className="w-10 h-10 rounded-lg object-cover" />
+                ) : (
+                  <span className="text-white font-bold text-xl">Z</span>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  ref={fileInputRef}
+                  onChange={handleProfilePicChange}
+                />
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Student Dashboard</h1>
@@ -285,11 +330,23 @@ export default function StudentDashboard() {
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Profile Picture</label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm text-gray-600 mb-2">Upload your profile picture</p>
-                          <button type="button" className="text-blue-600 hover:text-blue-700 font-medium">
-                            Choose File
+                        <div className="flex items-center gap-4">
+                          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-300 flex items-center justify-center cursor-pointer" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+                            {profilePicture ? (
+                              <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                              <img src="/placeholder-user.jpg" alt="Default" className="w-full h-full object-cover" />
+                            )}
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            ref={fileInputRef}
+                            onChange={handleProfilePicChange}
+                          />
+                          <button type="button" className="text-blue-600 hover:text-blue-700 font-medium" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+                            {uploading ? "Uploading..." : "Change Photo"}
                           </button>
                         </div>
                       </div>

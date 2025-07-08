@@ -20,8 +20,12 @@ import {
   AlertCircle,
   Eye,
   Shield,
+  Download,
+  Trash2,
 } from "lucide-react"
-import { createOrUpdateStudentProfile, getCurrentStudentProfile, StudentProfileData } from '../../../lib/api';
+import { createOrUpdateStudentProfile, getCurrentStudentProfile, StudentProfileData, uploadStudentDocument, uploadStudentCertificate, getStudentDocuments, deleteStudentDocument, deleteStudentCertificate } from '../../../lib/api';
+import { Avatar, AvatarImage, AvatarFallback } from '../../../components/ui/avatar';
+import DocumentViewer from '../../../components/DocumentViewer';
 
 // Utility to decode JWT and extract email
 function getEmailFromJWT() {
@@ -40,6 +44,16 @@ function getEmailFromJWT() {
   } catch {
     return '';
   }
+}
+
+function formatDateForInput(dateString: string | undefined): string {
+  if (!dateString) return '';
+  // If already in YYYY-MM-DD, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
+  // Try to parse and format
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
 }
 
 type ProfileType = {
@@ -63,6 +77,7 @@ type ProfileType = {
   interests: string[];
   preferredJobRoles: string[];
   preferredLocations: string[];
+  profilePicture?: string | null;
 };
 
 const initialProfile: ProfileType = {
@@ -86,9 +101,11 @@ const initialProfile: ProfileType = {
   interests: [],
   preferredJobRoles: [],
   preferredLocations: [],
+  profilePicture: null,
 };
 
 export default function StudentDashboard() {
+  console.log("StudentDashboard (app/student/dashboard/page.tsx) component loaded");
   const [activeTab, setActiveTab] = useState("jobs")
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")
@@ -96,6 +113,13 @@ export default function StudentDashboard() {
 
   // Certificate input state
   const [certificates, setCertificates] = useState<Array<{ name: string; file: File | null }>>([{ name: "", file: null }])
+
+  // Re-add refs and state for file inputs
+  const profilePicInputRef = useRef<HTMLInputElement>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
+  const marksheetInputRef = useRef<HTMLInputElement>(null);
+  const identityInputRef = useRef<HTMLInputElement>(null);
+  const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
 
   const handleCertificateChange = (index: number, value: string) => {
     setCertificates((prev) => {
@@ -121,12 +145,7 @@ export default function StudentDashboard() {
     setCertificates((prev) => prev.length === 1 ? prev : prev.filter((_, i) => i !== index))
   }
 
-  const profilePicInputRef = useRef<HTMLInputElement>(null)
-  const resumeInputRef = useRef<HTMLInputElement>(null)
-  const marksheetInputRef = useRef<HTMLInputElement>(null)
-  const identityInputRef = useRef<HTMLInputElement>(null)
-
-  const [profilePicFile, setProfilePicFile] = useState<File | null>(null)
+  
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [marksheetFile, setMarksheetFile] = useState<File | null>(null)
   const [identityFile, setIdentityFile] = useState<File | null>(null)
@@ -136,28 +155,33 @@ export default function StudentDashboard() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
-  const [profile, setProfile] = useState({
-    firstName: '',
-    lastName: '',
-    phone: '',
-    college: '',
-    course: '',
-    yearOfStudy: '',
-    gpa: '',
-    expectedGraduation: '',
-    academicAchievements: '',
-    linkedinProfile: '',
-    githubProfile: '',
-    portfolioWebsite: '',
-    dateOfBirth: '',
-    address: '',
-    bio: '',
-    careerGoals: '',
-    skills: [],
-    interests: [],
-    preferredJobRoles: [],
-    preferredLocations: [],
-  });
+  const [profile, setProfile] = useState<ProfileType>(initialProfile);
+
+  // Add these to the top of the StudentDashboard function, after useState declarations
+  const [skillInput, setSkillInput] = useState("");
+  const [interestInput, setInterestInput] = useState("");
+  const [preferredJobRoleInput, setPreferredJobRoleInput] = useState("");
+  const [preferredLocationInput, setPreferredLocationInput] = useState("");
+
+  // Add state for upload status
+  const [profilePicUploadStatus, setProfilePicUploadStatus] = useState<string | null>(null);
+  const [profilePicUploading, setProfilePicUploading] = useState(false);
+
+  // Add state for document uploads
+  const [resumeUploadStatus, setResumeUploadStatus] = useState<string | null>(null);
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [marksheetUploadStatus, setMarksheetUploadStatus] = useState<string | null>(null);
+  const [marksheetUploading, setMarksheetUploading] = useState(false);
+  const [identityUploadStatus, setIdentityUploadStatus] = useState<string | null>(null);
+  const [identityUploading, setIdentityUploading] = useState(false);
+  const [certificateUploadStatus, setCertificateUploadStatus] = useState<string | null>(null);
+  const [certificateUploading, setCertificateUploading] = useState(false);
+
+  // Add state for uploaded documents
+  const [uploadedDocuments, setUploadedDocuments] = useState<any>({ documents: [], certificates: [] });
+
+  // Add state for selected document
+  const [selectedDocument, setSelectedDocument] = useState<any>(null);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -170,11 +194,101 @@ export default function StudentDashboard() {
         interests: data.interests || [],
         preferredJobRoles: data.preferredJobRoles || [],
         preferredLocations: data.preferredLocations || [],
+        dateOfBirth: formatDateForInput(data.dateOfBirth),
+        profilePicture: data.profilePicture || null,
       };
       setProfile(newProfile);
     }).catch(() => {});
+    
+    // Fetch uploaded documents
+    fetchUploadedDocuments();
     // eslint-disable-next-line
   }, []);
+
+  const fetchUploadedDocuments = async () => {
+    try {
+      const data = await getStudentDocuments();
+      setUploadedDocuments(data);
+    } catch (err) {
+      console.error('Failed to fetch documents:', err);
+    }
+  };
+
+  const handleDocumentUpload = async (file: File | null, type: string, setUploading: (loading: boolean) => void, setStatus: (status: string | null) => void) => {
+    if (!file) return;
+    
+    setUploading(true);
+    setStatus(null);
+    try {
+      await uploadStudentDocument(file, type);
+      setStatus('Document uploaded successfully!');
+      fetchUploadedDocuments(); // Refresh the list
+    } catch (err: any) {
+      setStatus('Failed to upload document: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCertificateUpload = async (file: File | null, certificateName: string) => {
+    if (!file || !certificateName.trim()) return;
+    
+    setCertificateUploading(true);
+    setCertificateUploadStatus(null);
+    try {
+      await uploadStudentCertificate(file, certificateName);
+      setCertificateUploadStatus('Certificate uploaded successfully!');
+      fetchUploadedDocuments(); // Refresh the list
+      // Reset the certificate form
+      setCertificates([{ name: "", file: null }]);
+    } catch (err: any) {
+      setCertificateUploadStatus('Failed to upload certificate: ' + (err.message || 'Unknown error'));
+    } finally {
+      setCertificateUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: number, type: 'document' | 'certificate') => {
+    try {
+      if (type === 'document') {
+        await deleteStudentDocument(documentId);
+      } else {
+        await deleteStudentCertificate(documentId);
+      }
+      fetchUploadedDocuments(); // Refresh the list
+    } catch (err: any) {
+      console.error('Failed to delete document:', err);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  const handleViewDocument = (doc: any) => {
+    setSelectedDocument(doc);
+  };
+
+  const handleDownloadDocument = (doc: any) => {
+    const url = doc.url;
+    const fileName = doc.fileName;
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // const filteredJobs = [];
 
@@ -189,7 +303,10 @@ export default function StudentDashboard() {
     setSuccess('');
     setError('');
     try {
-      await createOrUpdateStudentProfile({ ...profile, email: jwtEmail });
+      await createOrUpdateStudentProfile({
+        ...profile,
+        email: jwtEmail,
+      });
       setSuccess('Profile updated successfully!');
     } catch (err: any) {
       setError(err.message || 'Failed to update profile.');
@@ -198,8 +315,49 @@ export default function StudentDashboard() {
     }
   };
 
+  // Add state and ref for profile picture upload
+  const handleProfilePicChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+    setProfilePicUploading(true);
+    console.log('Uploading file:', file);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:8080/api/profile/upload-photo', {
+        method: 'POST',
+        body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      console.log('Upload response:', data);
+      if (data.profilePictureUrl) {
+        setProfile((prev) => ({ ...prev, profilePicture: data.profilePictureUrl }));
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+    } finally {
+      setProfilePicUploading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Document Viewer Modal at root level */}
+      {selectedDocument && (
+        <DocumentViewer document={selectedDocument} isAdmin={false} onStatusChange={undefined} onClose={() => setSelectedDocument(null)} />
+      )}
+      <input
+        type="file"
+        accept="image/*"
+        ref={profilePicInputRef}
+        style={{ display: "none" }}
+        onChange={handleProfilePicChange}
+      />
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -211,7 +369,7 @@ export default function StudentDashboard() {
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Student Dashboard</h1>
                 <p className="text-sm text-gray-500">
-                  Welcome back
+                  Welcome back{profile.firstName || profile.lastName ? `, ${profile.firstName} ${profile.lastName}` : ''}
                 </p>
               </div>
             </div>
@@ -292,6 +450,33 @@ export default function StudentDashboard() {
                 {error && <div className="text-red-600 font-medium mb-4">{error}</div>}
 
                 <form className="space-y-8" onSubmit={handleProfileSubmit}>
+                  <div className="flex items-center gap-4 mb-6">
+                    <div
+                      className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-300 flex items-center justify-center cursor-pointer"
+                      onClick={() => profilePicInputRef.current && profilePicInputRef.current.click()}
+                    >
+                      {profile.profilePicture ? (
+                        <img src={profile.profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <img src="/placeholder-user.jpg" alt="Default" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      ref={profilePicInputRef}
+                      onChange={handleProfilePicChange}
+                    />
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                      onClick={() => profilePicInputRef.current && profilePicInputRef.current.click()}
+                      disabled={profilePicUploading}
+                    >
+                      {profilePicUploading ? 'Uploading...' : 'Change Photo'}
+                    </button>
+                  </div>
                   {/* Basic Information Section */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Basic Information</h3>
@@ -384,25 +569,6 @@ export default function StudentDashboard() {
                           placeholder="e.g., 8.5 or 3.8"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Expected Graduation Date</label>
-                        <input
-                          type="date"
-                          value={profile.expectedGraduation}
-                          onChange={e => setProfile({ ...profile, expectedGraduation: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Academic Achievements</label>
-                        <textarea
-                          rows={3}
-                          value={profile.academicAchievements}
-                          onChange={e => setProfile({ ...profile, academicAchievements: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="List your academic achievements, awards, honors, etc."
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -412,14 +578,40 @@ export default function StudentDashboard() {
                     <div className="space-y-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Skills</label>
-                        <input
-                          type="text"
-                          value={profile.skills.join(', ')}
-                          onChange={e => setProfile({ ...profile, skills: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="e.g. Java, Python, React"
-                        />
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="text"
+                            value={skillInput}
+                            onChange={e => setSkillInput(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && skillInput.trim()) {
+                                e.preventDefault();
+                                if (!profile.skills.includes(skillInput.trim())) {
+                                  setProfile({ ...profile, skills: [...profile.skills, skillInput.trim()] });
+                                }
+                                setSkillInput("");
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Type a skill and press Enter"
+                          />
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {profile.skills.map((skill, idx) => (
+                              <span key={idx} className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                              {skill}
+                                <button
+                                  type="button"
+                                  className="ml-2 text-blue-500 hover:text-blue-700 focus:outline-none"
+                                  onClick={() => setProfile({ ...profile, skills: profile.skills.filter((_, i) => i !== idx) })}
+                                  aria-label={`Remove skill ${skill}`}
+                                >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
                       </div>
+                        </div>
                       {/* Resume upload removed from here */}
                       <div className="grid md:grid-cols-2 gap-6">
                         <div>
@@ -490,13 +682,39 @@ export default function StudentDashboard() {
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Interests</label>
-                        <input
-                          type="text"
-                          value={profile.interests.join(', ')}
-                          onChange={e => setProfile({ ...profile, interests: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Add an interest and press Enter"
-                        />
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="text"
+                            value={interestInput}
+                            onChange={e => setInterestInput(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && interestInput.trim()) {
+                                e.preventDefault();
+                                if (!profile.interests.includes(interestInput.trim())) {
+                                  setProfile({ ...profile, interests: [...profile.interests, interestInput.trim()] });
+                                }
+                                setInterestInput("");
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Type an interest and press Enter"
+                          />
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {profile.interests.map((interest, idx) => (
+                              <span key={idx} className="inline-flex items-center px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                              {interest}
+                                <button
+                                  type="button"
+                                  className="ml-2 text-purple-500 hover:text-purple-700 focus:outline-none"
+                                  onClick={() => setProfile({ ...profile, interests: profile.interests.filter((_, i) => i !== idx) })}
+                                  aria-label={`Remove interest ${interest}`}
+                                >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -518,27 +736,79 @@ export default function StudentDashboard() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Job Roles</label>
-                        <input
-                          type="text"
-                          value={profile.preferredJobRoles.join(', ')}
-                          onChange={e => setProfile({ ...profile, preferredJobRoles: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Add a preferred job role and press Enter"
-                        />
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="text"
+                            value={preferredJobRoleInput}
+                            onChange={e => setPreferredJobRoleInput(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && preferredJobRoleInput.trim()) {
+                                e.preventDefault();
+                                if (!profile.preferredJobRoles.includes(preferredJobRoleInput.trim())) {
+                                  setProfile({ ...profile, preferredJobRoles: [...profile.preferredJobRoles, preferredJobRoleInput.trim()] });
+                                }
+                                setPreferredJobRoleInput("");
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Type a job role and press Enter"
+                          />
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {profile.preferredJobRoles.map((role, idx) => (
+                              <span key={idx} className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                              {role}
+                                <button
+                                  type="button"
+                                  className="ml-2 text-green-500 hover:text-green-700 focus:outline-none"
+                                  onClick={() => setProfile({ ...profile, preferredJobRoles: profile.preferredJobRoles.filter((_, i) => i !== idx) })}
+                                  aria-label={`Remove job role ${role}`}
+                                >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                        </div>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Locations</label>
+                        <div className="flex flex-col gap-2">
                         <input
                           type="text"
-                          value={profile.preferredLocations.join(', ')}
-                          onChange={e => setProfile({ ...profile, preferredLocations: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                            value={preferredLocationInput}
+                            onChange={e => setPreferredLocationInput(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && preferredLocationInput.trim()) {
+                                e.preventDefault();
+                                if (!profile.preferredLocations.includes(preferredLocationInput.trim())) {
+                                  setProfile({ ...profile, preferredLocations: [...profile.preferredLocations, preferredLocationInput.trim()] });
+                                }
+                                setPreferredLocationInput("");
+                              }
+                            }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Add a preferred location and press Enter"
-                        />
+                            placeholder="Type a location and press Enter"
+                          />
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {profile.preferredLocations.map((location, idx) => (
+                              <span key={idx} className="inline-flex items-center px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                              {location}
+                                <button
+                                  type="button"
+                                  className="ml-2 text-yellow-500 hover:text-yellow-700 focus:outline-none"
+                                  onClick={() => setProfile({ ...profile, preferredLocations: profile.preferredLocations.filter((_, i) => i !== idx) })}
+                                  aria-label={`Remove location ${location}`}
+                                >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                      </div>
 
                   <div className="flex justify-end space-x-4 pt-6 border-t">
                     <button
@@ -546,7 +816,7 @@ export default function StudentDashboard() {
                       className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200"
                       disabled={loading}
                     >
-                      {loading ? 'Saving...' : 'Edit Profile'}
+                      {loading ? 'Saving...' : 'Update Profile'}
                     </button>
                   </div>
                 </form>
@@ -560,43 +830,78 @@ export default function StudentDashboard() {
 
                 <div className="space-y-8">
                   {/* Profile Picture Section */}
-                  <div>
+                      <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Profile Picture</h3>
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                         <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                          {profilePicFile ? (
-                            <img
-                              src={URL.createObjectURL(profilePicFile)}
-                              alt="Profile"
-                              className="w-full h-full rounded-full object-cover"
-                            />
-                          ) : (
-                            <User className="w-8 h-8 text-gray-400" />
-                          )}
+                          <Avatar className="w-20 h-20">
+                            {profile.profilePicture ? (
+                              <AvatarImage src={profile.profilePicture} alt="Profile" />
+                            ) : profilePicFile ? (
+                              <AvatarImage src={URL.createObjectURL(profilePicFile)} alt="Profile" />
+                            ) : null}
+                            <AvatarFallback>
+                              <User className="w-8 h-8 text-gray-400" />
+                            </AvatarFallback>
+                          </Avatar>
                         </div>
-                        <p className="text-sm text-gray-600 mb-2">Upload your profile picture</p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          ref={profilePicInputRef}
-                          style={{ display: "none" }}
-                          onChange={e => setProfilePicFile(e.target.files ? e.target.files[0] : null)}
-                        />
-                        <button
-                          type="button"
-                          className="text-blue-600 hover:text-blue-700 font-medium"
-                          onClick={() => profilePicInputRef.current?.click()}
-                        >
-                          {profilePicFile ? "Change Picture" : "Upload Picture"}
-                        </button>
-                        {profilePicFile && (
-                          <div className="mt-2 text-xs text-gray-600">{profilePicFile.name}</div>
+                        {profile.profilePicture ? (
+                          <div className="flex items-center justify-center gap-2 mt-2">
+                            <button
+                              type="button"
+                              className="text-blue-600 hover:text-blue-700 font-medium"
+                              onClick={() => profilePicInputRef.current?.click()}
+                            >
+                              Change Picture
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm text-gray-600 mb-2">Upload your profile picture</p>
+                            <div className="flex items-center justify-center gap-2 mt-2">
+                              <button
+                                type="button"
+                                className="text-blue-600 hover:text-blue-700 font-medium"
+                                onClick={() => profilePicInputRef.current?.click()}
+                              >
+                                {profilePicFile ? "Change Picture" : "Select Picture"}
+                              </button>
+                              <button
+                                type="button"
+                                className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 font-medium disabled:opacity-50"
+                                disabled={!profilePicFile || profilePicUploading}
+                                onClick={async () => {
+                                  if (!profilePicFile) return;
+                                  setProfilePicUploading(true);
+                                  setProfilePicUploadStatus(null);
+                                  try {
+                                    await uploadStudentDocument(profilePicFile, 'profile_picture');
+                                    setProfilePicUploadStatus('Profile picture uploaded successfully!');
+                                  } catch (err: any) {
+                                    setProfilePicUploadStatus('Failed to upload profile picture: ' + (err.response?.data?.error || err.message));
+                                  } finally {
+                                    setProfilePicUploading(false);
+                                  }
+                                }}
+                              >
+                                {profilePicUploading ? 'Uploading...' : 'Upload'}
+                              </button>
+                            </div>
+                            {profilePicFile && (
+                              <div className="mt-1 text-xs text-gray-600">{profilePicFile.name}</div>
+                            )}
+                            {profilePicUploadStatus && (
+                              <div className={profilePicUploadStatus.includes('success') ? 'text-green-600' : 'text-red-600'}>
+                                {profilePicUploadStatus}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                       {/* Uploaded preview/status can go here if needed */}
                     </div>
-                  </div>
+                      </div>
 
                   {/* Resume Section */}
                   <div>
@@ -605,26 +910,76 @@ export default function StudentDashboard() {
                       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                         <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                         <p className="text-sm text-gray-600 mb-2">Upload your latest resume</p>
-                        <p className="text-xs text-gray-500 mb-3">Supported formats: PDF, DOC, DOCX (Max 5MB)</p>
+                        <p className="text-xs text-gray-500 mb-3">Supported formats: PDF only (Max 10MB)</p>
                         <input
                           type="file"
-                          accept=".pdf,.doc,.docx"
+                          accept=".pdf"
                           ref={resumeInputRef}
                           style={{ display: "none" }}
                           onChange={e => setResumeFile(e.target.files ? e.target.files[0] : null)}
                         />
-                        <button
-                          type="button"
-                          className="text-blue-600 hover:text-blue-700 font-medium"
-                          onClick={() => resumeInputRef.current?.click()}
-                        >
-                          {resumeFile ? "Update Resume" : "Upload Resume"}
-                        </button>
+                        <div className="flex items-center justify-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            className="text-blue-600 hover:text-blue-700 font-medium"
+                            onClick={() => resumeInputRef.current?.click()}
+                          >
+                            {resumeFile ? "Change Resume" : "Select Resume"}
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 font-medium disabled:opacity-50"
+                            disabled={!resumeFile || resumeUploading}
+                            onClick={() => handleDocumentUpload(resumeFile, 'resume', setResumeUploading, setResumeUploadStatus)}
+                          >
+                            {resumeUploading ? 'Uploading...' : 'Upload'}
+                          </button>
+                        </div>
                         {resumeFile && (
-                          <div className="mt-2 text-xs text-gray-600">{resumeFile.name}</div>
+                          <div className="mt-1 text-xs text-gray-600">{resumeFile.name}</div>
+                        )}
+                        {resumeUploadStatus && (
+                          <div className={resumeUploadStatus.includes('success') ? 'text-green-600' : 'text-red-600'}>
+                            {resumeUploadStatus}
+                          </div>
                         )}
                       </div>
-                      {/* Uploaded preview/status can go here if needed */}
+                      {/* Uploaded resume table */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Uploaded Resumes</h4>
+                        {uploadedDocuments.documents?.filter((doc: any) => doc.type === 'resume').length > 0 ? (
+                          <div className="space-y-2">
+                            {uploadedDocuments.documents?.filter((doc: any) => doc.type === 'resume').map((doc: any) => (
+                              <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
+                                  <p className="text-xs text-gray-500">{formatFileSize(doc.fileSize)} • {formatDate(doc.uploadedAt)}</p>
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                    doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                    doc.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {doc.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleViewDocument(doc)} className="p-1 text-blue-600 hover:text-blue-800" title="View/Download">
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDownloadDocument(doc)} className="p-1 text-green-600 hover:text-green-800" title="Download">
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteDocument(doc.id, 'document')} className="p-1 text-red-600 hover:text-red-800" title="Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                          ))}
+                        </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No resumes uploaded yet</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -635,7 +990,7 @@ export default function StudentDashboard() {
                       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                         <BookOpen className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                         <p className="text-sm text-gray-600 mb-2">Upload your latest marksheet</p>
-                        <p className="text-xs text-gray-500 mb-3">Supported formats: PDF, JPG, PNG (Max 5MB)</p>
+                        <p className="text-xs text-gray-500 mb-3">Supported formats: PDF, JPG, PNG (Max 10MB)</p>
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
@@ -643,30 +998,80 @@ export default function StudentDashboard() {
                           style={{ display: "none" }}
                           onChange={e => setMarksheetFile(e.target.files ? e.target.files[0] : null)}
                         />
-                        <button
-                          type="button"
-                          className="text-blue-600 hover:text-blue-700 font-medium"
-                          onClick={() => marksheetInputRef.current?.click()}
-                        >
-                          {marksheetFile ? "Update Marksheet" : "Upload Marksheet"}
-                        </button>
+                        <div className="flex items-center justify-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            className="text-blue-600 hover:text-blue-700 font-medium"
+                            onClick={() => marksheetInputRef.current?.click()}
+                          >
+                            {marksheetFile ? "Change Marksheet" : "Select Marksheet"}
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 font-medium disabled:opacity-50"
+                            disabled={!marksheetFile || marksheetUploading}
+                            onClick={() => handleDocumentUpload(marksheetFile, 'marksheet', setMarksheetUploading, setMarksheetUploadStatus)}
+                          >
+                            {marksheetUploading ? 'Uploading...' : 'Upload'}
+                          </button>
+                        </div>
                         {marksheetFile && (
-                          <div className="mt-2 text-xs text-gray-600">{marksheetFile.name}</div>
+                          <div className="mt-1 text-xs text-gray-600">{marksheetFile.name}</div>
+                        )}
+                        {marksheetUploadStatus && (
+                          <div className={marksheetUploadStatus.includes('success') ? 'text-green-600' : 'text-red-600'}>
+                            {marksheetUploadStatus}
+                          </div>
                         )}
                       </div>
-                      {/* Uploaded preview/status can go here if needed */}
+                      {/* Uploaded marksheet table */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Uploaded Marksheets</h4>
+                        {uploadedDocuments.documents?.filter((doc: any) => doc.type === 'marksheet').length > 0 ? (
+                          <div className="space-y-2">
+                            {uploadedDocuments.documents?.filter((doc: any) => doc.type === 'marksheet').map((doc: any) => (
+                              <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
+                                  <p className="text-xs text-gray-500">{formatFileSize(doc.fileSize)} • {formatDate(doc.uploadedAt)}</p>
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                    doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                    doc.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {doc.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleViewDocument(doc)} className="p-1 text-blue-600 hover:text-blue-800" title="View/Download">
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDownloadDocument(doc)} className="p-1 text-green-600 hover:text-green-800" title="Download">
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteDocument(doc.id, 'document')} className="p-1 text-red-600 hover:text-red-800" title="Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No marksheets uploaded yet</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                      </div>
 
                   {/* Identity Proof Section */}
-                  <div>
+                      <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Identity Proof</h3>
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                         <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                         <p className="text-sm text-gray-600 mb-2">Upload identity proof</p>
                         <p className="text-xs text-gray-500 mb-3">
-                          Aadhar Card, Passport, Driving License, etc. (Max 5MB)
+                          Aadhar Card, Passport, Driving License, etc. (Max 10MB)
                         </p>
                         <input
                           type="file"
@@ -675,18 +1080,68 @@ export default function StudentDashboard() {
                           style={{ display: "none" }}
                           onChange={e => setIdentityFile(e.target.files ? e.target.files[0] : null)}
                         />
-                        <button
-                          type="button"
-                          className="text-blue-600 hover:text-blue-700 font-medium"
-                          onClick={() => identityInputRef.current?.click()}
-                        >
-                          {identityFile ? "Update Identity Proof" : "Upload Identity Proof"}
-                        </button>
+                        <div className="flex items-center justify-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            className="text-blue-600 hover:text-blue-700 font-medium"
+                            onClick={() => identityInputRef.current?.click()}
+                          >
+                            {identityFile ? "Change Identity Proof" : "Select Identity Proof"}
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 font-medium disabled:opacity-50"
+                            disabled={!identityFile || identityUploading}
+                            onClick={() => handleDocumentUpload(identityFile, 'identity_proof', setIdentityUploading, setIdentityUploadStatus)}
+                          >
+                            {identityUploading ? 'Uploading...' : 'Upload'}
+                          </button>
+                      </div>
                         {identityFile && (
-                          <div className="mt-2 text-xs text-gray-600">{identityFile.name}</div>
+                          <div className="mt-1 text-xs text-gray-600">{identityFile.name}</div>
+                        )}
+                        {identityUploadStatus && (
+                          <div className={identityUploadStatus.includes('success') ? 'text-green-600' : 'text-red-600'}>
+                            {identityUploadStatus}
+                          </div>
                         )}
                       </div>
-                      {/* Uploaded preview/status can go here if needed */}
+                      {/* Uploaded identity proof table */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Uploaded Identity Proofs</h4>
+                        {uploadedDocuments.documents?.filter((doc: any) => doc.type === 'identity_proof').length > 0 ? (
+                          <div className="space-y-2">
+                            {uploadedDocuments.documents?.filter((doc: any) => doc.type === 'identity_proof').map((doc: any) => (
+                              <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
+                                  <p className="text-xs text-gray-500">{formatFileSize(doc.fileSize)} • {formatDate(doc.uploadedAt)}</p>
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                    doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                    doc.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {doc.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleViewDocument(doc)} className="p-1 text-blue-600 hover:text-blue-800" title="View/Download">
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDownloadDocument(doc)} className="p-1 text-green-600 hover:text-green-800" title="Download">
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteDocument(doc.id, 'document')} className="p-1 text-red-600 hover:text-red-800" title="Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No identity proofs uploaded yet</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -699,7 +1154,7 @@ export default function StudentDashboard() {
                         <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                         <p className="text-sm text-gray-600 mb-2">Enter certificate name/number and upload the file for each certificate</p>
                         <p className="text-xs text-gray-500 mb-3">
-                          Course certificates, internship certificates, awards, etc.
+                          Course certificates, internship certificates, awards, etc. (Max 10MB)
                         </p>
                         <div className="space-y-6">
                           {certificates.map((cert, idx) => (
@@ -726,14 +1181,24 @@ export default function StudentDashboard() {
                                   <span className="text-xs text-gray-600 truncate max-w-xs mt-1">{cert.file.name}</span>
                                 )}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => removeCertificate(idx)}
-                                className="absolute top-2 right-2 text-red-600 hover:text-red-800 px-2 py-1 rounded border border-red-100 bg-red-50 text-xs font-medium shadow-sm disabled:opacity-50"
-                                disabled={certificates.length === 1}
-                              >
-                                Remove
-                              </button>
+                              <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium disabled:opacity-50"
+                                  disabled={!cert.file || !cert.name.trim() || certificateUploading}
+                                  onClick={() => handleCertificateUpload(cert.file, cert.name)}
+                    >
+                                  {certificateUploading ? 'Uploading...' : 'Upload'}
+                    </button>
+                    <button
+                                  type="button"
+                                  onClick={() => removeCertificate(idx)}
+                                  className="text-red-600 hover:text-red-800 px-2 py-1 rounded border border-red-100 bg-red-50 text-xs font-medium shadow-sm disabled:opacity-50"
+                                  disabled={certificates.length === 1}
+                    >
+                                  Remove
+                    </button>
+                  </div>
                             </div>
                           ))}
                         </div>
@@ -744,49 +1209,48 @@ export default function StudentDashboard() {
                         >
                           Add Another Certificate
                         </button>
+                        {certificateUploadStatus && (
+                          <div className={certificateUploadStatus.includes('success') ? 'text-green-600' : 'text-red-600'}>
+                            {certificateUploadStatus}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Existing Certificates (commented out) */}
-                      {/* <div className="space-y-3"> ... </div> */}
-                    </div>
-                  </div>
-
-                  {/* Document Status Summary */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                    <h4 className="text-lg font-semibold text-blue-900 mb-3">Document Verification Status</h4>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Profile Picture</span>
-                          <span className="text-sm font-medium text-green-600">✓ Complete</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Resume</span>
-                          <span className="text-sm font-medium text-green-600">✓ Complete</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Marksheet</span>
-                          <span className="text-sm font-medium text-green-600">✓ Complete</span>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Identity Proof</span>
-                          <span className="text-sm font-medium text-yellow-600">⚠ Pending</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Certificates</span>
-                          <span className="text-sm font-medium text-green-600">✓ 2 Uploaded</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Overall Status</span>
-                          <span className="text-sm font-medium text-blue-600">80% Complete</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <div className="bg-blue-200 rounded-full h-2">
-                        <div className="bg-blue-600 h-2 rounded-full" style={{ width: "80%" }}></div>
+                      {/* Uploaded Certificates Table */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Uploaded Certificates</h4>
+                        {uploadedDocuments.certificates?.length > 0 ? (
+                          <div className="space-y-2">
+                            {uploadedDocuments.certificates?.map((cert: any) => (
+                              <div key={cert.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900">{cert.certificateName}</p>
+                                  <p className="text-xs text-gray-500">{cert.fileName} • {formatFileSize(cert.fileSize)} • {formatDate(cert.uploadedAt)}</p>
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                    cert.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                    cert.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {cert.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleViewDocument(cert)} className="p-1 text-blue-600 hover:text-blue-800" title="View/Download">
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDownloadDocument(cert)} className="p-1 text-green-600 hover:text-green-800" title="Download">
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteDocument(cert.id, 'certificate')} className="p-1 text-red-600 hover:text-red-800" title="Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No certificates uploaded yet</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -858,7 +1322,7 @@ export default function StudentDashboard() {
                             }`}
                           >
                             {job.type}
-                          </span>
+                  </span>
                         </div>
                       </div>
 
@@ -868,7 +1332,7 @@ export default function StudentDashboard() {
                         {job.requirements.map((req, index) => (
                           <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
                             {req}
-                          </span>
+                  </span>
                         ))}
                       </div>
 
@@ -905,7 +1369,7 @@ export default function StudentDashboard() {
                           {getStatusIcon(app.status)}
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.statusColor}`}>
                             {app.status}
-                          </span>
+                  </span>
                         </div>
                       </div>
                     </div>
