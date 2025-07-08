@@ -5,6 +5,8 @@ import type { NextRequest } from 'next/server'
 const protectedPaths = [
   '/student-dashboard',
   '/recruiter-dashboard',
+  '/admin-documents',
+  '/admin-panel',
 ]
 
 // Add paths that should redirect to dashboard if already logged in

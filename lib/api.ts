@@ -278,3 +278,123 @@ function handleProfileApiError(error: any): Error {
     return new Error('An unexpected error occurred. Please try again.');
   }
 } 
+
+export const uploadStudentDocument = async (
+  file: File,
+  type: string
+): Promise<any> => {
+  console.log("=== API Upload Debug ===");
+  console.log("Uploading file:", file.name);
+  console.log("File type:", file.type);
+  console.log("File size:", file.size);
+  console.log("Document type:", type);
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', type);
+  
+  console.log("FormData created, sending request...");
+  
+  try {
+    const response = await api.post('/api/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    console.log("Upload response:", response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error("Upload error:", error);
+    console.error("Error response:", error.response?.data);
+    throw error;
+  }
+};
+
+export const uploadStudentCertificate = async (
+  file: File,
+  certificateName: string
+): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('certificateName', certificateName);
+  const response = await api.post('/api/documents/certificates/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+
+export const getStudentDocuments = async (): Promise<any> => {
+  try {
+    const response = await api.get('/api/documents/student/list');
+    return response.data;
+  } catch (error: any) {
+    console.error("getStudentDocuments error:", error);
+    console.error("Error response:", error.response?.data);
+    throw error;
+  }
+};
+
+export const getStudentDocumentsByType = async (type: string): Promise<any> => {
+  const response = await api.get(`/api/documents/type/${type}`);
+  return response.data;
+};
+
+export const deleteStudentDocument = async (documentId: number): Promise<any> => {
+  const response = await api.delete(`/api/documents/${documentId}`);
+  return response.data;
+};
+
+export const deleteStudentCertificate = async (certificateId: number): Promise<any> => {
+  const response = await api.delete(`/api/documents/certificates/${certificateId}`);
+  return response.data;
+};
+
+export const getAllAdminDocuments = async (): Promise<any[]> => {
+  console.log("Calling getAllAdminDocuments API...");
+  try {
+    const response = await api.get('/api/documents/admin/all-documents');
+    console.log("getAllAdminDocuments response:", response.data);
+    console.log("Response type:", typeof response.data);
+    console.log("Is array:", Array.isArray(response.data));
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error: any) {
+    console.error("getAllAdminDocuments error:", error);
+    console.error("Error response:", error.response?.data);
+    throw error;
+  }
+};
+
+export const getAllAdminCertificates = async (): Promise<any[]> => {
+  console.log("Calling getAllAdminCertificates API...");
+  try {
+    const response = await api.get('/api/documents/admin/all-certificates');
+    console.log("getAllAdminCertificates response:", response.data);
+    console.log("Response type:", typeof response.data);
+    console.log("Is array:", Array.isArray(response.data));
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error: any) {
+    console.error("getAllAdminCertificates error:", error);
+    console.error("Error response:", error.response?.data);
+    throw error;
+  }
+};
+
+export const updateDocumentStatus = async (documentId: number, status: string): Promise<any> => {
+  const response = await api.patch(`/api/documents/admin/document-status/${documentId}?status=${status}`);
+  return response.data;
+};
+
+export const updateCertificateStatus = async (certificateId: number, status: string): Promise<any> => {
+  const response = await api.patch(`/api/documents/admin/certificate-status/${certificateId}?status=${status}`);
+  return response.data;
+};
+
+export const testDatabaseState = async (): Promise<any> => {
+  console.log("Calling test database state API...");
+  try {
+    const response = await api.get('/api/documents/test/db-state');
+    console.log("Test database state response:", response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error("Test database state error:", error);
+    throw error;
+  }
+}; 
