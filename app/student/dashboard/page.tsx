@@ -854,7 +854,7 @@ export default function StudentDashboard() {
                               onClick={() => profilePicInputRef.current?.click()}
                             >
                               Change Picture
-                            </button>
+                              </button>
                           </div>
                         ) : (
                           <>
@@ -960,7 +960,7 @@ export default function StudentDashboard() {
                                     'bg-yellow-100 text-yellow-700'
                                   }`}>
                                     {doc.status}
-                                  </span>
+                            </span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <button onClick={() => handleViewDocument(doc)} className="p-1 text-blue-600 hover:text-blue-800" title="View/Download">

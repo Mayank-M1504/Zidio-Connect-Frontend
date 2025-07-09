@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   Plus,
@@ -16,7 +18,14 @@ import {
   Briefcase,
   Users,
   Calendar,
+  User,
+  Building,
+  Shield,
+  BookOpen,
+  AlertCircle,
 } from "lucide-react"
+import { getCurrentRecruiterProfile, RecruiterProfileData, updateRecruiterProfile, getRecruiterDocuments, deleteRecruiterDocument } from "@/lib/api"
+import DocumentViewer from "@/components/DocumentViewer"
 
 export default function RecruiterDashboard() {
   const [activeTab, setActiveTab] = useState("jobs")
@@ -24,14 +33,109 @@ export default function RecruiterDashboard() {
   const [filterStatus, setFilterStatus] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const router = useRouter()
+  // Replace recruiterProfile state with a local editable state for the form fields
+  const [profileForm, setProfileForm] = useState<RecruiterProfileData>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Dummy data
-  const recruiterProfile = {
-    name: "Sarah Johnson",
-    company: "TechCorp Solutions",
-    email: "sarah@techcorp.com",
+  // Add recruiter documents state and modal logic
+  const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
+  const [showDocumentModal, setShowDocumentModal] = useState(false)
+  const [uploadingDocType, setUploadingDocType] = useState<string | null>(null)
+  const fileInputRefs = {
+    registration: useRef<HTMLInputElement>(null),
+    gst: useRef<HTMLInputElement>(null),
+    pan: useRef<HTMLInputElement>(null),
+    business: useRef<HTMLInputElement>(null),
   }
 
+  const handleDocumentUploadClick = (type: string) => {
+    setUploadingDocType(type)
+    if (fileInputRefs[type as keyof typeof fileInputRefs]?.current) {
+      fileInputRefs[type as keyof typeof fileInputRefs].current!.value = ""
+      fileInputRefs[type as keyof typeof fileInputRefs].current!.click()
+    }
+  }
+
+  // Add state for upload messages per document type
+  const [uploadMessages, setUploadMessages] = useState<{ [key: string]: { type: 'success' | 'error', text: string } | null }>({});
+
+  const handleDocumentFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: string
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingDocType(type);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", type);
+    try {
+      const res = await fetch(
+        "http://localhost:8080/api/recruiter/profile/documents/upload",
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setUploadMessages((prev) => ({ ...prev, [type]: { type: 'success', text: `${type} uploaded successfully!` } }));
+        // Optionally refresh document list here
+        getRecruiterDocuments().then((docs) => setRecruiterDocuments(docs));
+      } else {
+        setUploadMessages((prev) => ({ ...prev, [type]: { type: 'error', text: data.error || `Failed to upload ${type}` } }));
+      }
+    } catch (err) {
+      setUploadMessages((prev) => ({ ...prev, [type]: { type: 'error', text: `Failed to upload ${type}` } }));
+    } finally {
+      setUploadingDocType(null);
+      // Remove the message after 3 seconds
+      setTimeout(() => {
+        setUploadMessages((prev) => ({ ...prev, [type]: null }));
+      }, 3000);
+    }
+  };
+
+  const [recruiterDocuments, setRecruiterDocuments] = useState<any[]>([]);
+  const [docLoading, setDocLoading] = useState(true);
+
+  useEffect(() => {
+    getCurrentRecruiterProfile()
+      .then((data) => setProfileForm(data))
+      .finally(() => setLoading(false));
+    // Fetch recruiter documents
+    getRecruiterDocuments()
+      .then((docs) => setRecruiterDocuments(docs))
+      .finally(() => setDocLoading(false));
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setProfileForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setSaveSuccess(false)
+    setSaveError(null)
+    try {
+      await updateRecruiterProfile(profileForm)
+      setSaveSuccess(true)
+    } catch (err: any) {
+      setSaveError(err.message || "Failed to update profile")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Dummy data
   const postedJobs = [
     {
       id: 1,
@@ -161,9 +265,19 @@ export default function RecruiterDashboard() {
     }
   }
 
-  const handleLogout = () => {
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    window.location.href = '/';
+  // Add delete handler
+  const handleDeleteDocument = async (docId: number, type: string) => {
+    try {
+      await deleteRecruiterDocument(docId);
+      setUploadMessages((prev) => ({ ...prev, [type]: { type: 'success', text: 'Document deleted successfully!' } }));
+      getRecruiterDocuments().then((docs) => setRecruiterDocuments(docs));
+    } catch (err) {
+      setUploadMessages((prev) => ({ ...prev, [type]: { type: 'error', text: 'Failed to delete document' } }));
+    } finally {
+      setTimeout(() => {
+        setUploadMessages((prev) => ({ ...prev, [type]: null }));
+      }, 3000);
+    }
   };
 
   return (
@@ -178,7 +292,9 @@ export default function RecruiterDashboard() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Recruiter Dashboard</h1>
-                <p className="text-sm text-gray-500">Welcome back, {recruiterProfile.name}</p>
+                <p className="text-sm text-gray-500">
+                  Welcome back, {profileForm.firstName} {profileForm.lastName}
+                </p>
               </div>
             </div>
 
@@ -190,7 +306,7 @@ export default function RecruiterDashboard() {
                 <Settings className="w-5 h-5" />
               </button>
               <button
-                onClick={handleLogout}
+                onClick={() => router.push("/")}
                 className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -248,6 +364,15 @@ export default function RecruiterDashboard() {
             <div className="bg-white rounded-xl shadow-sm p-6 sticky top-8">
               <nav className="space-y-2">
                 <button
+                  onClick={() => setActiveTab("profile")}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                    activeTab === "profile" ? "bg-blue-50 text-blue-600" : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <User className="w-4 h-4" />
+                  <span>Profile</span>
+                </button>
+                <button
                   onClick={() => setActiveTab("jobs")}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
                     activeTab === "jobs" ? "bg-blue-50 text-blue-600" : "text-gray-600 hover:bg-gray-50"
@@ -271,6 +396,287 @@ export default function RecruiterDashboard() {
 
           {/* Main Content */}
           <div className="lg:col-span-3">
+            {/* Profile Tab */}
+            {activeTab === "profile" && (
+              <>
+                <form onSubmit={handleSaveProfile} className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
+                  {/* Basic Information */}
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Basic Information</h3>
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                        <input
+                          type="text"
+                          value={profileForm.firstName || ""}
+                          onChange={handleInputChange}
+                          name="firstName"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                        <input
+                          type="text"
+                          value={profileForm.lastName || ""}
+                          onChange={handleInputChange}
+                          name="lastName"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                        <input
+                          type="email"
+                          value={profileForm.email || ""}
+                          onChange={handleInputChange}
+                          name="email"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                        <input
+                          type="tel"
+                          value={profileForm.phone || ""}
+                          onChange={handleInputChange}
+                          name="phone"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Recruiter Role</label>
+                        <select
+                          value={profileForm.recruiterRole || ""}
+                          onChange={handleInputChange}
+                          name="recruiterRole"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option>HR Manager</option>
+                          <option>Hiring Specialist</option>
+                          <option>Founder</option>
+                          <option>Tech Lead</option>
+                          <option>Talent Acquisition Manager</option>
+                          <option>CEO</option>
+                          <option>Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn Profile</label>
+                        <input
+                          type="url"
+                          value={profileForm.linkedinProfile || ""}
+                          onChange={handleInputChange}
+                          name="linkedinProfile"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="https://linkedin.com/in/yourprofile"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Company Information */}
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Company Information</h3>
+                    <div className="space-y-6">
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Company/Organization Name
+                          </label>
+                          <input
+                            type="text"
+                            value={profileForm.companyName || ""}
+                            onChange={handleInputChange}
+                            name="companyName"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Company Website</label>
+                          <input
+                            type="url"
+                            value={profileForm.companyWebsite || ""}
+                            onChange={handleInputChange}
+                            name="companyWebsite"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="https://yourcompany.com"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Company Address</label>
+                        <textarea
+                          value={profileForm.companyAddress || ""}
+                          onChange={handleInputChange}
+                          name="companyAddress"
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Complete office address including city, state, country, and ZIP"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Company Description</label>
+                        <textarea
+                          value={profileForm.companyDescription || ""}
+                          onChange={handleInputChange}
+                          name="companyDescription"
+                          rows={4}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Describe your company, culture, services, or products..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">STIN / Registration Number</label>
+                        <input
+                          type="text"
+                          value={profileForm.stinNumber || ""}
+                          onChange={handleInputChange}
+                          name="stinNumber"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter STIN or company registration number"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex justify-end space-x-4 pt-6">
+                    <button
+                      type="submit"
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                      disabled={saving}
+                    >
+                      {saving ? "Saving..." : "Update Profile"}
+                    </button>
+                  </div>
+                  {saveSuccess && (
+                    <div className="mt-4 text-green-600 text-center">Profile updated successfully!</div>
+                  )}
+                  {saveError && <div className="mt-4 text-red-600 text-center">{saveError}</div>}
+                </form>
+
+                {/* Company Documents Section - redesigned */}
+                <div className="bg-white rounded-xl shadow-sm p-6 mt-8">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Company Documents</h3>
+                  {/* Document Types */}
+                  {[
+                    {
+                      key: 'registration',
+                      label: 'Company Registration Certificate',
+                      icon: <Building className="w-8 h-8 text-gray-400 mx-auto mb-2" />,
+                      description: 'Certificate of Incorporation, MSME, Shop & Establishment License',
+                      accept: '.pdf,.jpg,.jpeg,.png',
+                      typeLabel: 'Certificate of Incorporation',
+                    },
+                    {
+                      key: 'gst',
+                      label: 'GST Registration Certificate',
+                      icon: <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />,
+                      description: 'Required for tax verification and invoicing',
+                      accept: '.pdf,.jpg,.jpeg,.png',
+                      typeLabel: 'GST Certificate',
+                    },
+                    {
+                      key: 'pan',
+                      label: 'PAN Card (Company or Individual)',
+                      icon: <User className="w-8 h-8 text-gray-400 mx-auto mb-2" />,
+                      description: 'Company PAN or Individual PAN for verification',
+                      accept: '.pdf,.jpg,.jpeg,.png',
+                      typeLabel: 'PAN Card',
+                    },
+                    {
+                      key: 'business',
+                      label: 'Business License or Trade License',
+                      icon: <BookOpen className="w-8 h-8 text-gray-400 mx-auto mb-2" />,
+                      description: 'Required for regulated sectors (healthcare, finance, etc.)',
+                      accept: '.pdf,.jpg,.jpeg,.png',
+                      typeLabel: 'Business License',
+                    },
+                  ].map((docType) => (
+                    <div key={docType.key} className="mb-8">
+                      <h4 className="text-md font-medium text-gray-800 mb-3">{docType.label}</h4>
+                      <div className="grid md:grid-cols-2 gap-6">
+                        {/* Upload Box */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center flex flex-col items-center justify-center">
+                          {docType.icon}
+                          <p className="text-sm text-gray-600 mb-2">Upload {docType.label}</p>
+                          <p className="text-xs text-gray-500 mb-3">{docType.description}</p>
+                          <div className="flex flex-col items-center gap-2 w-full">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleDocumentUploadClick(docType.key)}
+                                className="px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 font-medium"
+                              >
+                                Choose File
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => fileInputRefs[docType.key as keyof typeof fileInputRefs].current?.files?.length && handleDocumentFileChange({ target: fileInputRefs[docType.key as keyof typeof fileInputRefs].current } as any, docType.key)}
+                                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded hover:shadow-lg font-medium disabled:opacity-50"
+                                disabled={!(fileInputRefs[docType.key as keyof typeof fileInputRefs].current && fileInputRefs[docType.key as keyof typeof fileInputRefs].current.files && fileInputRefs[docType.key as keyof typeof fileInputRefs].current.files.length)}
+                              >
+                                Update
+                              </button>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1 min-h-[1.5em]">
+                              {fileInputRefs[docType.key as keyof typeof fileInputRefs].current && fileInputRefs[docType.key as keyof typeof fileInputRefs].current.files && fileInputRefs[docType.key as keyof typeof fileInputRefs].current.files.length
+                                ? fileInputRefs[docType.key as keyof typeof fileInputRefs].current.files[0].name
+                                : "No file chosen"}
+                            </div>
+                            {uploadMessages[docType.key] && (
+                              <div className={`text-xs mt-1 ${uploadMessages[docType.key]?.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>{uploadMessages[docType.key]?.text}</div>
+                            )}
+                          </div>
+                          <input
+                            type="file"
+                            accept={docType.accept}
+                            ref={fileInputRefs[docType.key as keyof typeof fileInputRefs]}
+                            style={{ display: 'none' }}
+                            onChange={e => {
+                              // Just force a re-render to update the file name display
+                              setUploadingDocType(uploadingDocType => uploadingDocType === docType.key ? null : docType.key);
+                            }}
+                          />
+                        </div>
+                        {/* Uploaded Documents List */}
+                        <div>
+                          <h5 className="text-sm font-semibold text-gray-700 mb-2">Uploaded {docType.label}s</h5>
+                          {docLoading ? (
+                            <div className="text-gray-400 text-sm">Loading...</div>
+                          ) : (
+                            recruiterDocuments.filter(doc => doc.type === docType.key).length === 0 ? (
+                              <div className="text-gray-400 text-sm">No document uploaded yet.</div>
+                            ) : (
+                              recruiterDocuments.filter(doc => doc.type === docType.key).map((doc) => (
+                                <div key={doc.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 mb-2 border border-gray-200">
+                                  <div>
+                                    <div className="font-medium text-gray-900 text-sm">{doc.fileName}</div>
+                                    <div className="text-xs text-gray-500">{(doc.fileSize/1024/1024).toFixed(2)} MB &middot; {new Date(doc.uploadedAt).toLocaleDateString()}</div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' : doc.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{doc.status}</span>
+                                    <button title="View" onClick={() => { setSelectedDocument(doc); setShowDocumentModal(true); }} className="text-blue-600 hover:text-blue-800"><Eye className="w-4 h-4" /></button>
+                                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-900"><Download className="w-4 h-4" /></a>
+                                    <button title="Delete" onClick={() => handleDeleteDocument(doc.id, docType.key)} className="text-red-600 hover:text-red-800"><XCircle className="w-4 h-4" /></button>
+                                  </div>
+                                </div>
+                              ))
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </>
+            )}
             {/* Jobs Tab */}
             {activeTab === "jobs" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
@@ -575,6 +981,15 @@ export default function RecruiterDashboard() {
           </div>
         </div>
       )}
+
+      {/* Document Viewer Modal */}
+      {showDocumentModal && selectedDocument && (
+        <DocumentViewer
+          document={selectedDocument}
+          onClose={() => setShowDocumentModal(false)}
+        />
+      )}
     </div>
   )
-} 
+}
+    
