@@ -159,6 +159,42 @@ export interface StudentProfileData {
   workAuthorizationStatus?: string;
 }
 
+export interface RecruiterProfileData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  companyName?: string;
+  companyWebsite?: string;
+  companyAddress?: string;
+  companyDescription?: string;
+  recruiterRole?: string;
+  linkedinProfile?: string;
+  stinNumber?: string;
+}
+
+export const getCurrentRecruiterProfile = async (): Promise<RecruiterProfileData> => {
+  try {
+    const response = await api.get('/api/recruiter/profile');
+    return response.data;
+  } catch (error: any) {
+    if (error.response && error.response.status === 404) {
+      return {};
+    }
+    throw error;
+  }
+};
+
+export const updateRecruiterProfile = async (profileData: RecruiterProfileData): Promise<RecruiterProfileData> => {
+  const response = await api.post('/api/recruiter/profile', profileData, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+  });
+  return response.data;
+};
+
 // Test function to verify JSON communication
 export const testJsonCommunication = async (): Promise<any> => {
   try {
@@ -397,4 +433,32 @@ export const testDatabaseState = async (): Promise<any> => {
     console.error("Test database state error:", error);
     throw error;
   }
-}; 
+};
+
+export const getRecruiterDocuments = async (): Promise<any[]> => {
+  try {
+    const response = await api.get('/api/recruiter/profile/documents');
+    return response.data;
+  } catch (error: any) {
+    console.error('getRecruiterDocuments error:', error);
+    throw error;
+  }
+};
+
+export const getRecruiterDocumentById = async (id: number): Promise<any | null> => {
+  try {
+    const response = await api.get(`/api/recruiter/document/${id}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response && error.response.status === 404) {
+      return null; // No document found
+    }
+    console.error('getRecruiterDocumentById error:', error);
+    throw error;
+  }
+};
+
+export const deleteRecruiterDocument = async (documentId: number): Promise<any> => {
+  const response = await api.delete(`/api/recruiter/profile/document/${documentId}`);
+  return response.data;
+};
