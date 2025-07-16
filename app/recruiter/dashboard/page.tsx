@@ -23,11 +23,40 @@ import {
   Shield,
   BookOpen,
   AlertCircle,
+  MessageCircle,
 } from "lucide-react"
-import { getCurrentRecruiterProfile, RecruiterProfileData, updateRecruiterProfile, getRecruiterDocuments, deleteRecruiterDocument } from "@/lib/api"
-import DocumentViewer from "@/components/DocumentViewer"
+import { getCurrentRecruiterProfile, RecruiterProfileData, updateRecruiterProfile, getRecruiterDocuments, deleteRecruiterDocument, getRecruiterJobs, Job, postRecruiterJob, deleteRecruiterJob, uploadRecruiterCompanyLogo, getApplicationsForJob, updateApplicationStatus } from "@/lib/api";
+import DocumentViewer from "../../../components/DocumentViewer"
+import MessageModal from "../../../components/MessageModal";
+
+interface LocalJob {
+  id: number
+  title: string
+  department: string
+  location: string
+  type: string
+  stipend: string
+  applicants: number
+  posted: string
+  status: string
+}
+
+interface Applicant {
+  id: number
+  name: string
+  email: string
+  college: string
+  jobTitle: string
+  appliedDate: string
+  status: string
+  resume: string
+  skills: string[]
+}
 
 export default function RecruiterDashboard() {
+  // State for jobs and applicants data
+  const [postedJobs, setPostedJobs] = useState<LocalJob[]>([])
+  const [applicants, setApplicants] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("jobs")
   const [showJobForm, setShowJobForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState("all")
@@ -109,11 +138,35 @@ export default function RecruiterDashboard() {
     getCurrentRecruiterProfile()
       .then((data) => setProfileForm(data))
       .finally(() => setLoading(false));
+    // Fetch recruiter jobs
+    getRecruiterJobs().then((jobs) => setPostedJobs(jobs.map((job: any) => ({
+      id: job.id,
+      title: job.title,
+      department: job.department,
+      location: job.location,
+      type: job.jobType || '',
+      stipend: job.stipendSalary || '',
+      applicants: job.applicants || 0,
+      posted: job.posted || '',
+      status: job.adminApprovalStatus || '',
+    }))));
     // Fetch recruiter documents
     getRecruiterDocuments()
       .then((docs) => setRecruiterDocuments(docs))
       .finally(() => setDocLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "applicants" && postedJobs.length > 0) {
+      // Fetch applications for all jobs
+      Promise.all(postedJobs.map(job => getApplicationsForJob(job.id)))
+        .then((allApps) => {
+          // Store the full application objects from the API
+          setApplicants(allApps.flat());
+        })
+        .catch(() => setApplicants([]));
+    }
+  }, [activeTab, postedJobs]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -135,90 +188,6 @@ export default function RecruiterDashboard() {
     }
   }
 
-  // Dummy data
-  const postedJobs = [
-    {
-      id: 1,
-      title: "Frontend Developer Intern",
-      department: "Engineering",
-      location: "Bangalore",
-      type: "Internship",
-      stipend: "₹25,000/month",
-      applicants: 45,
-      posted: "2024-01-15",
-      status: "Active",
-    },
-    {
-      id: 2,
-      title: "Backend Developer",
-      department: "Engineering",
-      location: "Mumbai",
-      type: "Full-time",
-      stipend: "₹12,00,000/year",
-      applicants: 32,
-      posted: "2024-01-10",
-      status: "Active",
-    },
-    {
-      id: 3,
-      title: "UI/UX Designer",
-      department: "Design",
-      location: "Remote",
-      type: "Internship",
-      stipend: "₹20,000/month",
-      applicants: 28,
-      posted: "2024-01-08",
-      status: "Closed",
-    },
-  ]
-
-  const applicants = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      college: "MIT",
-      jobTitle: "Frontend Developer Intern",
-      appliedDate: "2024-01-16",
-      status: "Applied",
-      resume: "john_doe_resume.pdf",
-      skills: ["React", "JavaScript", "CSS"],
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      college: "Stanford",
-      jobTitle: "Frontend Developer Intern",
-      appliedDate: "2024-01-17",
-      status: "Shortlisted",
-      resume: "jane_smith_resume.pdf",
-      skills: ["React", "TypeScript", "Node.js"],
-    },
-    {
-      id: 3,
-      name: "Mike Wilson",
-      email: "mike@example.com",
-      college: "Berkeley",
-      jobTitle: "Backend Developer",
-      appliedDate: "2024-01-12",
-      status: "Rejected",
-      resume: "mike_wilson_resume.pdf",
-      skills: ["Python", "Django", "PostgreSQL"],
-    },
-    {
-      id: 4,
-      name: "Emily Brown",
-      email: "emily@example.com",
-      college: "Harvard",
-      jobTitle: "UI/UX Designer",
-      appliedDate: "2024-01-14",
-      status: "Shortlisted",
-      resume: "emily_brown_resume.pdf",
-      skills: ["Figma", "Adobe XD", "Prototyping"],
-    },
-  ]
-
   const [jobForm, setJobForm] = useState({
     title: "",
     department: "",
@@ -228,27 +197,55 @@ export default function RecruiterDashboard() {
     duration: "",
     description: "",
     requirements: "",
+    questionForApplicant: "",
   })
 
-  const handleJobFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Handle job posting logic here
-    setShowJobForm(false)
-    setJobForm({
-      title: "",
-      department: "",
-      location: "",
-      type: "internship",
-      stipend: "",
-      duration: "",
-      description: "",
-      requirements: "",
-    })
-  }
+  const handleJobFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await postRecruiterJob({
+        title: jobForm.title,
+        department: jobForm.department,
+        location: jobForm.location,
+        jobType: jobForm.type,
+        stipendSalary: jobForm.stipend,
+        duration: jobForm.duration,
+        description: jobForm.description,
+        requirements: jobForm.requirements,
+        questionForApplicant: jobForm.questionForApplicant,
+      });
+      // Optionally refetch jobs here:
+      getRecruiterJobs().then((jobs) => setPostedJobs(jobs.map((job: any) => ({
+        id: job.id,
+        title: job.title,
+        department: job.department,
+        location: job.location,
+        type: job.jobType || '',
+        stipend: job.stipendSalary || '',
+        applicants: job.applicants || 0,
+        posted: job.posted || '',
+        status: job.adminApprovalStatus || '',
+      }))));
+      setShowJobForm(false);
+      setJobForm({
+        title: "",
+        department: "",
+        location: "",
+        type: "internship",
+        stipend: "",
+        duration: "",
+        description: "",
+        requirements: "",
+        questionForApplicant: "",
+      });
+    } catch (err) {
+      alert("Failed to post job. Please try again.");
+    }
+  };
 
   const filteredApplicants = applicants.filter((applicant) => {
     const matchesSearch =
-      applicant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      applicant.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       applicant.jobTitle.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFilter = filterStatus === "all" || applicant.status.toLowerCase() === filterStatus
     return matchesSearch && matchesFilter
@@ -280,6 +277,105 @@ export default function RecruiterDashboard() {
     }
   };
 
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<number | null>(null);
+  const [deleteInput, setDeleteInput] = useState("");
+
+  const handleDeleteJob = async (jobId: number) => {
+    try {
+      await deleteRecruiterJob(jobId);
+      getRecruiterJobs().then((jobs) => setPostedJobs(jobs.map((job: any) => ({
+        id: job.id,
+        title: job.title,
+        department: job.department,
+        location: job.location,
+        type: job.jobType || '',
+        stipend: job.stipendSalary || '',
+        applicants: job.applicants || 0,
+        posted: job.posted || '',
+        status: job.adminApprovalStatus || '',
+      }))));
+    } catch (err) {
+      alert("Failed to delete job. Please try again.");
+    }
+  };
+
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [companyLogoUploading, setCompanyLogoUploading] = useState(false);
+  const [companyLogoUploadMsg, setCompanyLogoUploadMsg] = useState<string | null>(null);
+  const companyLogoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (profileForm && profileForm.companyLogo) {
+      setCompanyLogo(profileForm.companyLogo);
+    }
+  }, [profileForm]);
+
+  const handleCompanyLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCompanyLogoUploading(true);
+    setCompanyLogoUploadMsg(null);
+    try {
+      const url = await uploadRecruiterCompanyLogo(file);
+      setCompanyLogo(url);
+      setCompanyLogoUploadMsg('Logo uploaded successfully!');
+      setProfileForm((prev) => ({ ...prev, companyLogo: url }));
+    } catch (err: any) {
+      setCompanyLogoUploadMsg('Failed to upload logo');
+    } finally {
+      setCompanyLogoUploading(false);
+      setTimeout(() => setCompanyLogoUploadMsg(null), 3000);
+    }
+  };
+
+  function isProfileComplete(profile: any) {
+    return profile.firstName && profile.lastName && profile.email && profile.phone && profile.companyName;
+  }
+  function areDocsApproved(docs: any[]) {
+    const required = ["registration", "gst", "pan", "business"];
+    return required.every(type => docs.some(doc => doc.type === type && doc.status === "APPROVED"));
+  }
+
+  const canPostJob = isProfileComplete(profileForm) && areDocsApproved(recruiterDocuments);
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.href = '/';
+  };
+
+  const [selectedApplicant, setSelectedApplicant] = useState<any | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const handleStatusUpdate = async (status: string) => {
+    if (!selectedApplicant) return;
+    setStatusUpdating(true);
+    try {
+      await updateApplicationStatus(selectedApplicant.id, status);
+      if (status === "REJECTED") {
+        setApplicants((prev) => prev.filter(app => app.id !== selectedApplicant.id));
+      } else {
+        setApplicants((prev) => prev.map(app => app.id === selectedApplicant.id ? { ...app, status } : app));
+      }
+      setSelectedApplicant(null);
+    } catch (err) {
+      alert("Failed to update status. Please try again.");
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  // Helper function to infer content type from URL
+  function inferContentTypeFromUrl(url: string) {
+    if (!url) return '';
+    if (url.endsWith('.pdf')) return 'application/pdf';
+    if (url.match(/\.(jpg|jpeg|png|gif)$/i)) return 'image/';
+    return '';
+  }
+
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chatApplicationId, setChatApplicationId] = useState<number | null>(null);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -306,7 +402,7 @@ export default function RecruiterDashboard() {
                 <Settings className="w-5 h-5" />
               </button>
               <button
-                onClick={() => router.push("/")}
+                onClick={handleLogout}
                 className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -324,7 +420,7 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Jobs Posted</p>
-                <p className="text-2xl font-bold text-gray-900">12</p>
+                <p className="text-2xl font-bold text-gray-900">{postedJobs.length}</p>
               </div>
               <Briefcase className="w-8 h-8 text-blue-600" />
             </div>
@@ -333,7 +429,7 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Applicants</p>
-                <p className="text-2xl font-bold text-gray-900">105</p>
+                <p className="text-2xl font-bold text-gray-900">{applicants.length}</p>
               </div>
               <Users className="w-8 h-8 text-green-600" />
             </div>
@@ -342,7 +438,9 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Shortlisted</p>
-                <p className="text-2xl font-bold text-gray-900">23</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {applicants.filter(app => app.status === 'Shortlisted').length}
+                </p>
               </div>
               <CheckCircle className="w-8 h-8 text-purple-600" />
             </div>
@@ -351,7 +449,13 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">This Month</p>
-                <p className="text-2xl font-bold text-gray-900">8</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {postedJobs.filter(job => {
+                    const jobDate = new Date(job.posted)
+                    const now = new Date()
+                    return jobDate.getMonth() === now.getMonth() && jobDate.getFullYear() === now.getFullYear()
+                  }).length}
+                </p>
               </div>
               <Calendar className="w-8 h-8 text-orange-600" />
             </div>
@@ -529,18 +633,6 @@ export default function RecruiterDashboard() {
                           placeholder="Describe your company, culture, services, or products..."
                         />
                       </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">STIN / Registration Number</label>
-                        <input
-                          type="text"
-                          value={profileForm.stinNumber || ""}
-                          onChange={handleInputChange}
-                          name="stinNumber"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter STIN or company registration number"
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -563,6 +655,41 @@ export default function RecruiterDashboard() {
                 {/* Company Documents Section - redesigned */}
                 <div className="bg-white rounded-xl shadow-sm p-6 mt-8">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Company Documents</h3>
+                  {/* Company Logo */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center flex flex-col items-center justify-center mb-8">
+                    <Building className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600 mb-2">Upload Company Logo</p>
+                    <p className="text-xs text-gray-500 mb-3">Recommended: Square PNG/JPG, max 2MB</p>
+                    <div className="flex flex-col items-center gap-2 w-full">
+                      <div className="flex items-center gap-4">
+                        {companyLogo ? (
+                          <img src={companyLogo} alt="Company Logo" className="w-20 h-20 object-contain rounded border" />
+                        ) : (
+                          <div className="w-20 h-20 bg-gray-100 flex items-center justify-center rounded border text-gray-400">No Logo</div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            ref={companyLogoInputRef}
+                            style={{ display: 'none' }}
+                            onChange={handleCompanyLogoChange}
+                          />
+                          <button
+                            type="button"
+                            className="px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 font-medium"
+                            onClick={() => companyLogoInputRef.current?.click()}
+                            disabled={companyLogoUploading}
+                          >
+                            {companyLogoUploading ? 'Uploading...' : 'Choose File'}
+                          </button>
+                        </div>
+                      </div>
+                      {companyLogoUploadMsg && (
+                        <span className={companyLogoUploadMsg.includes('success') ? 'text-green-600' : 'text-red-600'}>{companyLogoUploadMsg}</span>
+                      )}
+                    </div>
+                  </div>
                   {/* Document Types */}
                   {[
                     {
@@ -683,13 +810,29 @@ export default function RecruiterDashboard() {
                 {/* Header with Post Job Button */}
                 <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-bold text-gray-900">Posted Jobs</h2>
-                  <button
-                    onClick={() => setShowJobForm(true)}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-2"
+                  <div className="relative group" style={{ display: 'inline-block' }}
+                    onMouseEnter={() => { if (!canPostJob) setShowTooltip(true); }}
+                    onMouseLeave={() => setShowTooltip(false)}
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Post New Job</span>
-                  </button>
+                    <button
+                      onClick={() => canPostJob && setShowJobForm(true)}
+                      className={`bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 transition-all duration-200 ${canPostJob ? 'hover:shadow-lg transform hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
+                      disabled={!canPostJob}
+                      tabIndex={0}
+                      style={{ pointerEvents: canPostJob ? 'auto' : 'none' }}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Post New Job</span>
+                    </button>
+                    {showTooltip && !canPostJob && (
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 z-20 flex flex-col items-center" style={{ minWidth: 240 }}>
+                        <div className="relative bg-blue-100 text-blue-900 text-sm rounded-xl px-4 py-2 shadow-lg border border-blue-400 font-medium animate-fade-in" style={{ boxShadow: '0 4px 16px rgba(30,64,175,0.10)' }}>
+                          Please complete your profile and upload all required documents to post a job.
+                          <span className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-blue-100"></span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Job Listings */}
@@ -729,22 +872,29 @@ export default function RecruiterDashboard() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{job.department}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{job.location}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{job.applicants}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-</td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
                                 className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                  job.status === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                  job.adminApprovalStatus === "APPROVED"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-yellow-100 text-yellow-800"
                                 }`}
                               >
-                                {job.status}
+                                {job.adminApprovalStatus === "APPROVED" ? "Approved" : "Pending"}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <button className="text-blue-600 hover:text-blue-900 mr-3">
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button className="text-gray-600 hover:text-gray-900">
-                                <Download className="w-4 h-4" />
+                              <button
+                                className="text-red-600 hover:text-red-800"
+                                onClick={() => {
+                                  setJobToDelete(job.id);
+                                  setShowDeleteDialog(true);
+                                  setDeleteInput("");
+                                }}
+                                title="Delete Job"
+                              >
+                                <XCircle className="w-4 h-4" />
                               </button>
                             </td>
                           </tr>
@@ -793,12 +943,13 @@ export default function RecruiterDashboard() {
                   {filteredApplicants.map((applicant) => (
                     <div
                       key={applicant.id}
-                      className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow"
+                      className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => setSelectedApplicant(applicant)}
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">{applicant.name}</h3>
-                          <p className="text-gray-600 mb-1">{applicant.email}</p>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-1">{applicant.studentName}</h3>
+                          <p className="text-gray-600 mb-1">{applicant.studentEmail}</p>
                           <p className="text-sm text-gray-500 mb-2">{applicant.college}</p>
                           <p className="text-sm font-medium text-blue-600">{applicant.jobTitle}</p>
                         </div>
@@ -808,22 +959,39 @@ export default function RecruiterDashboard() {
                           >
                             {applicant.status}
                           </span>
-                          <p className="text-sm text-gray-500 mt-1">Applied: {applicant.appliedDate}</p>
+                          {applicant.status.toLowerCase() === "shortlisted" && (
+                            <button
+                              className="ml-2 text-blue-600 hover:text-blue-800"
+                              title="Open Chat"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setChatApplicationId(applicant.id);
+                                setShowChatModal(true);
+                              }}
+                            >
+                              <MessageCircle className="w-5 h-5" />
+                            </button>
+                          )}
+                          <p className="text-sm text-gray-500 mt-1">Applied: {applicant.appliedAt ? new Date(applicant.appliedAt).toLocaleDateString() : 'N/A'}</p>
                         </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2 mb-4">
-                        {applicant.skills.map((skill, index) => (
-                          <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
-                            {skill}
-                          </span>
-                        ))}
+                        {Array.isArray(applicant.skills) && applicant.skills.length > 0 ? (
+                          applicant.skills.map((skill, index) => (
+                            <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
+                              {skill}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-400">No skills listed</span>
+                        )}
                       </div>
 
                       <div className="flex justify-between items-center">
                         <button className="text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1">
                           <Download className="w-4 h-4" />
-                          <span>{applicant.resume}</span>
+                          <span>{applicant.resume?.name || 'No Resume'}</span>
                         </button>
                         <div className="flex space-x-2">
                           <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-1">
@@ -961,6 +1129,17 @@ export default function RecruiterDashboard() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Question for Applicants (optional)</label>
+                  <textarea
+                    value={jobForm.questionForApplicant}
+                    onChange={(e) => setJobForm({ ...jobForm, questionForApplicant: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g. Why do you want to join our company?"
+                  />
+                </div>
+
                 <div className="flex justify-end space-x-4 pt-4">
                   <button
                     type="button"
@@ -982,11 +1161,215 @@ export default function RecruiterDashboard() {
         </div>
       )}
 
+      {showDeleteDialog && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+            <h2 className="text-lg font-semibold mb-2">Confirm Deletion</h2>
+            <p className="mb-4">Type <span className="font-bold">Yes</span> to confirm deletion of this job.</p>
+            <input
+              type="text"
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              className="w-full border px-3 py-2 rounded mb-4"
+              placeholder="Type Yes to confirm"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded bg-gray-200"
+                onClick={() => setShowDeleteDialog(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-600 text-white"
+                disabled={deleteInput !== "Yes"}
+                onClick={async () => {
+                  if (jobToDelete && deleteInput === "Yes") {
+                    await handleDeleteJob(jobToDelete);
+                    setShowDeleteDialog(false);
+                  }
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Document Viewer Modal */}
       {showDocumentModal && selectedDocument && (
         <DocumentViewer
           document={selectedDocument}
-          onClose={() => setShowDocumentModal(false)}
+          onStatusChange={async (_docId, newStatus) => {
+            if (!selectedApplicant) return;
+            setStatusUpdating(true);
+            try {
+              await updateApplicationStatus(selectedApplicant.id, newStatus);
+              setApplicants((prev) => prev.map(app => app.id === selectedApplicant.id ? { ...app, status: newStatus } : app));
+              setShowDocumentModal(false);
+              setSelectedDocument(null);
+              setSelectedApplicant(null);
+            } catch (err) {
+              alert("Failed to update status. Please try again.");
+            } finally {
+              setStatusUpdating(false);
+            }
+          }}
+          onClose={() => { setShowDocumentModal(false); setSelectedDocument(null); }}
+        />
+      )}
+
+      {selectedApplicant && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-2xl relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+              onClick={() => setSelectedApplicant(null)}
+            >
+              &times;
+            </button>
+            <h2 className="text-2xl font-bold mb-6">Application Details</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Profile Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-2 border-l-4 border-blue-500 pl-2">Profile</h3>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500">Name</label>
+                  <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.studentName || '-'}</div>
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500">Email</label>
+                  <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.studentEmail || '-'}</div>
+                </div>
+                {selectedApplicant.phone && (
+                  <div className="mb-2">
+                    <label className="block text-xs text-gray-500">Phone</label>
+                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.phone}</div>
+                  </div>
+                )}
+                {selectedApplicant.college && (
+                  <div className="mb-2">
+                    <label className="block text-xs text-gray-500">College</label>
+                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.college}</div>
+                  </div>
+                )}
+                {selectedApplicant.course && (
+                  <div className="mb-2">
+                    <label className="block text-xs text-gray-500">Course</label>
+                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.course}</div>
+                  </div>
+                )}
+                {selectedApplicant.yearOfStudy && (
+                  <div className="mb-2">
+                    <label className="block text-xs text-gray-500">Year</label>
+                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.yearOfStudy}</div>
+                  </div>
+                )}
+              </div>
+              {/* Documents Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-2 border-l-4 border-blue-500 pl-2">Documents</h3>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500">Resume</label>
+                  <div className="bg-gray-100 rounded px-3 py-2 flex items-center gap-2">
+                    {selectedApplicant.resume?.url ? (
+                      <>
+                        <span>{selectedApplicant.resume.name || 'Resume'}</span>
+                        <button type="button" title="View Resume" onClick={() => {
+                          const doc = selectedApplicant.resume;
+                          setSelectedDocument({
+                            ...doc,
+                            fileName: doc.name || 'Resume',
+                            contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
+                          });
+                          setShowDocumentModal(true);
+                        }}>
+                          <Eye className="w-4 h-4 text-blue-600 inline-block align-middle hover:text-blue-800" />
+                        </button>
+                      </>
+                    ) : (
+                      'Not submitted'
+                    )}
+                  </div>
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500">Marksheet</label>
+                  <div className="bg-gray-100 rounded px-3 py-2 flex items-center gap-2">
+                    {selectedApplicant.marksheet?.url ? (
+                      <>
+                        <span>{selectedApplicant.marksheet.name || 'Marksheet'}</span>
+                        <button type="button" title="View Marksheet" onClick={() => {
+                          const doc = selectedApplicant.marksheet;
+                          setSelectedDocument({
+                            ...doc,
+                            fileName: doc.name || 'Marksheet',
+                            contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
+                          });
+                          setShowDocumentModal(true);
+                        }}>
+                          <Eye className="w-4 h-4 text-blue-600 inline-block align-middle hover:text-blue-800" />
+                        </button>
+                      </>
+                    ) : (
+                      'Not submitted'
+                    )}
+                  </div>
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500">Certificates</label>
+                  <div className="bg-gray-100 rounded px-3 py-2">
+                    {Array.isArray(selectedApplicant.certificates) && selectedApplicant.certificates.length > 0 ? (
+                      <ul className="list-disc ml-6">
+                        {selectedApplicant.certificates.map((cert: any, idx: number) => (
+                          <li key={cert.id} className="flex items-center gap-2">
+                            <span>{cert.name || 'Certificate'}</span>
+                            <button type="button" title="View Certificate" onClick={() => {
+                              setSelectedDocument({
+                                ...cert,
+                                fileName: cert.name || 'Certificate',
+                                contentType: cert.contentType || inferContentTypeFromUrl(cert.url),
+                              });
+                              setShowDocumentModal(true);
+                            }}>
+                              <Eye className="w-4 h-4 text-blue-600 inline-block align-middle hover:text-blue-800" />
+                            </button>
+                            {cert.status && <span className="ml-2 text-xs text-gray-500">({cert.status})</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      'None'
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-4 mt-8">
+              <button
+                className="px-6 py-2 rounded bg-red-500 text-white font-semibold hover:bg-red-600 transition disabled:opacity-50"
+                disabled={statusUpdating}
+                onClick={() => handleStatusUpdate("REJECTED")}
+              >
+                {statusUpdating ? "Updating..." : "Reject"}
+              </button>
+              <button
+                className="px-6 py-2 rounded bg-green-500 text-white font-semibold hover:bg-green-600 transition disabled:opacity-50"
+                disabled={statusUpdating}
+                onClick={() => handleStatusUpdate("SHORTLISTED")}
+              >
+                {statusUpdating ? "Updating..." : "Shortlist"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showChatModal && chatApplicationId && (
+        <MessageModal
+          applicationId={chatApplicationId}
+          onClose={() => setShowChatModal(false)}
         />
       )}
     </div>

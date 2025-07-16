@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Plus,
@@ -27,95 +27,20 @@ export default function RecruiterDashboard() {
   const [searchTerm, setSearchTerm] = useState("")
   const navigate = useNavigate()
 
-  // Dummy data
-  const recruiterProfile = {
-    name: "Sarah Johnson",
-    company: "TechCorp Solutions",
-    email: "sarah@techcorp.com",
-  }
+  // State for jobs data
+  const [postedJobs, setPostedJobs] = useState([])
+  const [recruiterProfile, setRecruiterProfile] = useState({
+    name: "",
+    company: "",
+    email: "",
+  })
+  const [applicants, setApplicants] = useState([])
 
-  const postedJobs = [
-    {
-      id: 1,
-      title: "Frontend Developer Intern",
-      department: "Engineering",
-      location: "Bangalore",
-      type: "Internship",
-      stipend: "₹25,000/month",
-      applicants: 45,
-      posted: "2024-01-15",
-      status: "Active",
-    },
-    {
-      id: 2,
-      title: "Backend Developer",
-      department: "Engineering",
-      location: "Mumbai",
-      type: "Full-time",
-      stipend: "₹12,00,000/year",
-      applicants: 32,
-      posted: "2024-01-10",
-      status: "Active",
-    },
-    {
-      id: 3,
-      title: "UI/UX Designer",
-      department: "Design",
-      location: "Remote",
-      type: "Internship",
-      stipend: "₹20,000/month",
-      applicants: 28,
-      posted: "2024-01-08",
-      status: "Closed",
-    },
-  ]
-
-  const applicants = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      college: "MIT",
-      jobTitle: "Frontend Developer Intern",
-      appliedDate: "2024-01-16",
-      status: "Applied",
-      resume: "john_doe_resume.pdf",
-      skills: ["React", "JavaScript", "CSS"],
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      college: "Stanford",
-      jobTitle: "Frontend Developer Intern",
-      appliedDate: "2024-01-17",
-      status: "Shortlisted",
-      resume: "jane_smith_resume.pdf",
-      skills: ["React", "TypeScript", "Node.js"],
-    },
-    {
-      id: 3,
-      name: "Mike Wilson",
-      email: "mike@example.com",
-      college: "Berkeley",
-      jobTitle: "Backend Developer",
-      appliedDate: "2024-01-12",
-      status: "Rejected",
-      resume: "mike_wilson_resume.pdf",
-      skills: ["Python", "Django", "PostgreSQL"],
-    },
-    {
-      id: 4,
-      name: "Emily Brown",
-      email: "emily@example.com",
-      college: "Harvard",
-      jobTitle: "UI/UX Designer",
-      appliedDate: "2024-01-14",
-      status: "Shortlisted",
-      resume: "emily_brown_resume.pdf",
-      skills: ["Figma", "Adobe XD", "Prototyping"],
-    },
-  ]
+  // Load data from backend
+  useEffect(() => {
+    // TODO: Load recruiter profile, posted jobs, and applicants from backend
+    // This will be implemented when the backend endpoints are ready
+  }, [])
 
   const [jobForm, setJobForm] = useState({
     title: "",
@@ -210,7 +135,7 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Jobs Posted</p>
-                <p className="text-2xl font-bold text-gray-900">12</p>
+                <p className="text-2xl font-bold text-gray-900">{postedJobs.length}</p>
               </div>
               <Briefcase className="w-8 h-8 text-blue-600" />
             </div>
@@ -219,7 +144,7 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Applicants</p>
-                <p className="text-2xl font-bold text-gray-900">105</p>
+                <p className="text-2xl font-bold text-gray-900">{applicants.length}</p>
               </div>
               <Users className="w-8 h-8 text-green-600" />
             </div>
@@ -228,7 +153,9 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Shortlisted</p>
-                <p className="text-2xl font-bold text-gray-900">23</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {applicants.filter(app => app.status === 'Shortlisted').length}
+                </p>
               </div>
               <CheckCircle className="w-8 h-8 text-purple-600" />
             </div>
@@ -237,7 +164,13 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">This Month</p>
-                <p className="text-2xl font-bold text-gray-900">8</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {postedJobs.filter(job => {
+                    const jobDate = new Date(job.posted)
+                    const now = new Date()
+                    return jobDate.getMonth() === now.getMonth() && jobDate.getFullYear() === now.getFullYear()
+                  }).length}
+                </p>
               </div>
               <Calendar className="w-8 h-8 text-orange-600" />
             </div>

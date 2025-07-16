@@ -22,10 +22,13 @@ import {
   Shield,
   Download,
   Trash2,
+  MessageCircle,
 } from "lucide-react"
-import { createOrUpdateStudentProfile, getCurrentStudentProfile, StudentProfileData, uploadStudentDocument, uploadStudentCertificate, getStudentDocuments, deleteStudentDocument, deleteStudentCertificate } from '../../../lib/api';
+import { createOrUpdateStudentProfile, getCurrentStudentProfile, StudentProfileData, uploadStudentDocument, uploadStudentCertificate, getStudentDocuments, deleteStudentDocument, deleteStudentCertificate, getAllJobs, Job, getMyApplications } from '../../../lib/api';
 import { Avatar, AvatarImage, AvatarFallback } from '../../../components/ui/avatar';
 import DocumentViewer from '../../../components/DocumentViewer';
+import MessageModal from '../../../components/MessageModal';
+// REMOVE: import { Dialog } from '@headlessui/react';
 
 // Utility to decode JWT and extract email
 function getEmailFromJWT() {
@@ -103,6 +106,30 @@ const initialProfile: ProfileType = {
   preferredLocations: [],
   profilePicture: null,
 };
+
+// Add helper functions for profile completeness and document verification
+function isProfileComplete(profile: ProfileType) {
+  return (
+    profile.firstName &&
+    profile.lastName &&
+    profile.phone &&
+    profile.college &&
+    profile.course &&
+    profile.yearOfStudy &&
+    profile.gpa &&
+    profile.skills.length > 0 &&
+    profile.interests.length > 0 &&
+    profile.careerGoals &&
+    profile.profilePicture
+  );
+}
+
+function areDocumentsVerified(uploadedDocuments: any) {
+  const resume = uploadedDocuments.documents.find((d: any) => d.type === 'resume' && d.status === 'APPROVED');
+  const marksheet = uploadedDocuments.documents.find((d: any) => d.type === 'marksheet' && d.status === 'APPROVED');
+  // You can add more required docs if needed
+  return resume && marksheet;
+}
 
 export default function StudentDashboard() {
   console.log("StudentDashboard (app/student/dashboard/page.tsx) component loaded");
@@ -182,6 +209,19 @@ export default function StudentDashboard() {
 
   // Add state for selected document
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
+
+  // Add state for Apply Now modal
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyJob, setApplyJob] = useState<any>(null);
+  const [applicantAnswer, setApplicantAnswer] = useState('');
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyError, setApplyError] = useState('');
+  const [applySuccess, setApplySuccess] = useState('');
+
+  // Add state for Apply Now tooltip
+  const [applyTooltipJobId, setApplyTooltipJobId] = useState<number | null>(null);
+
+  const [openChatAppId, setOpenChatAppId] = useState<number | null>(null);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -344,6 +384,82 @@ export default function StudentDashboard() {
       setProfilePicUploading(false);
     }
   };
+
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState('');
+
+  useEffect(() => {
+    if (activeTab === 'jobs') {
+      setJobsLoading(true);
+      setJobsError('');
+      getAllJobs()
+        .then((data) => {
+          setJobs(Array.isArray(data) ? data : []);
+        })
+        .catch((err) => {
+          setJobsError('Failed to load jobs');
+        })
+        .finally(() => setJobsLoading(false));
+    }
+  }, [activeTab]);
+
+  // Add handler for Apply Now
+  const handleApplyNow = (job: any) => {
+    setApplyJob(job);
+    setApplicantAnswer('');
+    setShowApplyModal(true);
+  };
+
+  const handleSubmitApplication = async () => {
+    setApplyLoading(true);
+    setApplyError('');
+    setApplySuccess('');
+    try {
+      // Collect document IDs (assume resume, marksheet, certificates are uploaded and available in uploadedDocuments)
+      const resume = uploadedDocuments.documents.find((d: any) => d.type === 'resume');
+      const marksheet = uploadedDocuments.documents.find((d: any) => d.type === 'marksheet');
+      const certificateIds = uploadedDocuments.certificates?.map((c: any) => c.id) || [];
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:8080/api/applications/apply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          jobId: applyJob.id,
+          resumeId: resume?.id,
+          marksheetId: marksheet?.id,
+          certificateIds,
+          answerForRecruiter: applicantAnswer,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to apply');
+      setApplySuccess('Application submitted successfully!');
+      setShowApplyModal(false);
+      // Optionally refresh applications tab here
+    } catch (err: any) {
+      setApplyError(err.message || 'Failed to apply');
+    } finally {
+      setApplyLoading(false);
+    }
+  };
+
+  const [myApplications, setMyApplications] = useState<any[]>([]);
+  const [myApplicationsLoading, setMyApplicationsLoading] = useState(false);
+  const [myApplicationsError, setMyApplicationsError] = useState('');
+
+  useEffect(() => {
+    if (activeTab === 'applications') {
+      setMyApplicationsLoading(true);
+      setMyApplicationsError('');
+      getMyApplications()
+        .then((data) => setMyApplications(Array.isArray(data) ? data : []))
+        .catch((err) => setMyApplicationsError('Failed to load applications'))
+        .finally(() => setMyApplicationsLoading(false));
+    }
+  }, [activeTab]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1291,59 +1407,116 @@ export default function StudentDashboard() {
 
                 {/* Job Listings */}
                 <div className="space-y-4">
-                  {/* filteredJobs.map((job) => (
-                    <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
-                          <div className="flex items-center space-x-4 text-sm text-gray-600">
-                            <div className="flex items-center space-x-1">
-                              <Building className="w-4 h-4" />
-                              <span>{job.company}</span>
+                  {jobsLoading ? (
+                    <div className="text-center text-gray-500">Loading jobs...</div>
+                  ) : jobsError ? (
+                    <div className="text-center text-red-500">{jobsError}</div>
+                  ) : (
+                    jobs
+                      .filter((job) => job.adminApprovalStatus === 'APPROVED')
+                      .filter((job) =>
+                        (filterType === 'all' || job.jobType?.toLowerCase() === filterType) &&
+                        (searchTerm === '' ||
+                          job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          job.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          job.location?.toLowerCase().includes(searchTerm.toLowerCase()))
+                      )
+                      .map((job) => (
+                        <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                <div className="flex items-center space-x-1">
+                                  <Building className="w-4 h-4" />
+                                  <span>{job.department}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <MapPin className="w-4 h-4" />
+                                  <span>{job.location}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <Clock className="w-4 h-4" />
+                                  <span>{job.duration}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center space-x-1">
-                              <MapPin className="w-4 h-4" />
-                              <span>{job.location}</span>
+                            <div className="text-right">
+                              <div className="flex items-center space-x-1 text-green-600 font-semibold">
+                                <DollarSign className="w-4 h-4" />
+                                <span>{job.stipendSalary}</span>
+                              </div>
+                              <span
+                                className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                                  job.jobType === "Internship" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                                }`}
+                              >
+                                {job.jobType}
+                              </span>
                             </div>
-                            <div className="flex items-center space-x-1">
-                              <Clock className="w-4 h-4" />
-                              <span>{job.duration}</span>
+                          </div>
+
+                          <p className="text-gray-600 mb-4">{job.description}</p>
+
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {job.requirements?.split(',').map((req: string, index: number) => (
+                              <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
+                                {req.trim()}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="flex justify-between items-center">
+                            {/* <span className="text-sm text-gray-500">Posted {job.posted}</span> */}
+                            <div
+                              className="relative group"
+                              style={{ display: 'inline-block' }}
+                              onMouseEnter={() => setApplyTooltipJobId(job.id)}
+                              onMouseLeave={() => setApplyTooltipJobId(null)}
+                            >
+                              {(() => {
+                                // Check if already applied
+                                const alreadyApplied = myApplications.some(
+                                  (app) => app.jobId === job.id || app.job?.id === job.id
+                                );
+                                const disabled = alreadyApplied || !isProfileComplete(profile) || !areDocumentsVerified(uploadedDocuments);
+                                let tooltipMsg = '';
+                                if (alreadyApplied) {
+                                  tooltipMsg = 'You have already applied to this job.';
+                                } else if (!isProfileComplete(profile) && !areDocumentsVerified(uploadedDocuments)) {
+                                  tooltipMsg = 'Please complete your profile and upload all required, approved documents to apply.';
+                                } else if (!isProfileComplete(profile)) {
+                                  tooltipMsg = 'Please complete your profile to apply.';
+                                } else if (!areDocumentsVerified(uploadedDocuments)) {
+                                  tooltipMsg = 'All required documents must be uploaded and approved to apply.';
+                                }
+                                return (
+                                  <>
+                                    <button
+                                      className={`bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      onClick={() => (!disabled && handleApplyNow(job))}
+                                      disabled={disabled}
+                                      tabIndex={0}
+                                      style={{ pointerEvents: !disabled ? 'auto' : 'none' }}
+                                    >
+                                      Apply Now
+                                    </button>
+                                    {applyTooltipJobId === job.id && tooltipMsg && (
+                                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 flex flex-col items-center" style={{ minWidth: 240 }}>
+                                        <div className="relative bg-yellow-100 text-yellow-900 text-xs rounded-xl px-3 py-2 shadow-lg border border-yellow-400 font-medium animate-fade-in" style={{ boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }}>
+                                          {tooltipMsg}
+                                          <span className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-yellow-100"></span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="flex items-center space-x-1 text-green-600 font-semibold">
-                            <DollarSign className="w-4 h-4" />
-                            <span>{job.stipend}</span>
-                          </div>
-                          <span
-                            className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                              job.type === "Internship" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
-                            }`}
-                          >
-                            {job.type}
-                  </span>
-                        </div>
-                      </div>
-
-                      <p className="text-gray-600 mb-4">{job.description}</p>
-
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {job.requirements.map((req, index) => (
-                          <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
-                            {req}
-                  </span>
-                        ))}
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-500">Posted {job.posted}</span>
-                        <button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200">
-                          Apply Now
-                        </button>
-                      </div>
-                    </div>
-                  )) */}
+                      ))
+                  )}
                 </div>
               </div>
             )}
@@ -1352,34 +1525,186 @@ export default function StudentDashboard() {
             {activeTab === "applications" && (
               <div className="bg-white rounded-xl shadow-sm p-6 animate-in fade-in slide-in-from-right duration-300">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">My Applications</h2>
-
                 <div className="space-y-4">
-                  {/* applications.map((app) => (
-                    <div
-                      key={app.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">{app.jobTitle}</h3>
-                          <p className="text-gray-600 mb-2">{app.company}</p>
-                          <p className="text-sm text-gray-500">Applied on {app.appliedDate}</p>
+                  {myApplicationsLoading ? (
+                    <div className="text-center text-gray-500">Loading applications...</div>
+                  ) : myApplicationsError ? (
+                    <div className="text-center text-red-500">{myApplicationsError}</div>
+                  ) : myApplications.length === 0 ? (
+                    <div className="text-center text-gray-500">You have not applied to any jobs yet.</div>
+                  ) : (
+                    myApplications.map((app) => (
+                      <div
+                        key={app.id}
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{app.jobTitle || app.job?.title}</h3>
+                            <p className="text-gray-600 mb-2">{app.company || app.job?.companyName}</p>
+                            <p className="text-sm text-gray-500">Applied on {app.appliedAt ? new Date(app.appliedAt).toLocaleDateString() : ''}</p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.status === 'Shortlisted' ? 'bg-green-100 text-green-700' : app.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {app.status}
+                            </span>
+                            {/* Chat button for Shortlisted applications */}
+                            {app.status === 'SHORTLISTED' && (
+                              <button
+                                className="p-2 text-blue-600 hover:text-blue-800"
+                                title="Chat with Recruiter"
+                                onClick={() => setOpenChatAppId(app.id)}
+                              >
+                                <MessageCircle className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(app.status)}
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.statusColor}`}>
-                            {app.status}
-                  </span>
-                        </div>
+                        {/* Optionally add a button to view more details */}
                       </div>
-                    </div>
-                  )) */}
+                    ))
+                  )}
                 </div>
+                {/* Chat Modal */}
+                {openChatAppId && (
+                  <MessageModal
+                    applicationId={openChatAppId}
+                    onClose={() => setOpenChatAppId(null)}
+                    userRole="STUDENT"
+                  />
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
+      {/* Application Modal */}
+      {showApplyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full mx-auto p-8 border border-gray-200 animate-in fade-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-2xl font-bold text-gray-900">Review Your Application</div>
+              <button
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={() => setShowApplyModal(false)}
+                aria-label="Close"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            {/* Profile Section */}
+            <div className="col-span-2 text-lg font-semibold text-gray-800 mt-2 mb-2 border-l-4 border-blue-500 pl-2">Profile</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
+                  {profile.firstName} {profile.lastName}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
+                  {jwtEmail}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
+                  {profile.phone}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">College</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
+                  {profile.college}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Course</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
+                  {profile.course}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
+                  {profile.yearOfStudy}
+                </div>
+              </div>
+            </div>
+            <div className="col-span-2 flex justify-end mb-6">
+              <button
+                className="px-3 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium border border-blue-200 transition"
+                onClick={() => { setShowApplyModal(false); setActiveTab('profile'); }}
+              >
+                Edit Profile
+              </button>
+            </div>
+            {/* Documents Section */}
+            <div className="col-span-2 text-lg font-semibold text-gray-800 mt-2 mb-2 border-l-4 border-blue-500 pl-2">Documents</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Resume</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text truncate">
+                  {uploadedDocuments.documents.find((d: any) => d.type === 'resume')?.name || 'Not uploaded'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Marksheet</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text truncate">
+                  {uploadedDocuments.documents.find((d: any) => d.type === 'marksheet')?.name || 'Not uploaded'}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Certificates</label>
+                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text truncate">
+                  {uploadedDocuments.certificates?.length > 0 ? uploadedDocuments.certificates.map((c: any) => c.certificateName).join(', ') : 'None'}
+                </div>
+              </div>
+            </div>
+            <div className="col-span-2 flex justify-end mb-6">
+              <button
+                className="px-3 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium border border-blue-200 transition"
+                onClick={() => { setShowApplyModal(false); setActiveTab('documents'); }}
+              >
+                Edit Documents
+              </button>
+            </div>
+            {/* Recruiter Question Section (if present) */}
+            {applyJob?.questionForApplicant && (
+              <div className="col-span-2 mb-6">
+                <div className="text-xs text-gray-500 mb-1">Recruiter's Question</div>
+                <div className="text-base text-gray-800 mb-1">{applyJob.questionForApplicant}</div>
+                <textarea
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                  placeholder="Your answer..."
+                  value={applicantAnswer}
+                  onChange={e => setApplicantAnswer(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
+            {/* Actions */}
+            <div className="flex justify-end gap-4 mt-2">
+              <button
+                className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors text-base"
+                onClick={() => setShowApplyModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2 rounded-lg hover:shadow-lg transition-all duration-200 font-semibold text-base"
+                onClick={handleSubmitApplication}
+                disabled={applyLoading || (applyJob?.questionForApplicant && !applicantAnswer.trim())}
+              >
+                {applyLoading ? 'Applying...' : 'Submit Application'}
+              </button>
+            </div>
+            {applyError && <div className="text-red-600 mt-2 text-base">{applyError}</div>}
+            {applySuccess && <div className="text-green-600 mt-2 text-base">{applySuccess}</div>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
