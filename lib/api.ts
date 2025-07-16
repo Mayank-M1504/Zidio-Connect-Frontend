@@ -171,6 +171,7 @@ export interface RecruiterProfileData {
   recruiterRole?: string;
   linkedinProfile?: string;
   stinNumber?: string;
+  companyLogo?: string;
 }
 
 export const getCurrentRecruiterProfile = async (): Promise<RecruiterProfileData> => {
@@ -460,5 +461,74 @@ export const getRecruiterDocumentById = async (id: number): Promise<any | null> 
 
 export const deleteRecruiterDocument = async (documentId: number): Promise<any> => {
   const response = await api.delete(`/api/recruiter/profile/document/${documentId}`);
+  return response.data;
+};
+
+export interface Job {
+  id: number
+  title: string
+  department: string
+  location: string
+  jobType: string
+  stipendSalary: string
+  duration: string
+  description: string
+  requirements: string
+  adminApprovalStatus: string
+  // Add other fields as needed
+}
+
+export const getRecruiterJobs = async (): Promise<Job[]> => {
+  const response = await api.get('/api/recruiter/jobs');
+  return response.data;
+};
+
+export const postRecruiterJob = async (jobData: any): Promise<any> => {
+  const response = await api.post('/api/recruiter/jobs', jobData);
+  return response.data;
+};
+
+export const deleteRecruiterJob = async (jobId: number): Promise<any> => {
+  const response = await api.delete(`/api/recruiter/jobs/${jobId}`);
+  return response.data;
+};
+
+export const getAllJobs = async (): Promise<Job[]> => {
+  const response = await api.get('/api/admin/jobs');
+  return response.data;
+};
+
+export const uploadRecruiterCompanyLogo = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post('/api/recruiter/profile/upload-logo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data.companyLogoUrl;
+};
+
+export const getApplicationsForJob = async (jobId: number): Promise<any> => {
+  const response = await api.get(`/api/applications/job/${jobId}`);
+  return response.data;
+};
+
+export const getMyApplications = async (): Promise<any[]> => {
+  const response = await api.get('/api/applications/my');
+  return response.data;
+};
+
+export const updateApplicationStatus = async (applicationId: number, status: string): Promise<void> => {
+  await api.patch(`/api/applications/${applicationId}/status`, null, {
+    params: { status },
+  });
+};
+
+export const getMessages = async (applicationId: number): Promise<any[]> => {
+  const response = await api.get(`/api/messages/${applicationId}`);
+  return response.data;
+};
+
+export const sendMessage = async (applicationId: number, content: string): Promise<any> => {
+  const response = await api.post('/api/messages', { applicationId, content });
   return response.data;
 };

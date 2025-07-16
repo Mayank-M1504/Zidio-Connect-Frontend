@@ -22,6 +22,7 @@ interface DocumentViewerProps {
 
 export default function DocumentViewer({ document, onStatusChange, isAdmin = false, onClose }: DocumentViewerProps) {
   const [previewError, setPreviewError] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes'
@@ -87,9 +88,11 @@ export default function DocumentViewer({ document, onStatusChange, isAdmin = fal
     }
   }
 
-  const handleStatusChange = (newStatus: string) => {
+  const handleStatusChange = async (newStatus: string) => {
     if (onStatusChange) {
-      onStatusChange(document.id, newStatus)
+      setStatusUpdating(true);
+      await onStatusChange(document.id, newStatus);
+      setStatusUpdating(false);
     }
   }
 
@@ -114,19 +117,11 @@ export default function DocumentViewer({ document, onStatusChange, isAdmin = fal
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]" onClick={onClose}>
       <div className="bg-white rounded-lg max-w-6xl max-h-[95vh] w-full overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b">
           <h3 className="text-xl font-semibold">{document.fileName}</h3>
           <div className="flex items-center space-x-2">
-            <a
-              href={document.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
-            >
-              Open in New Tab
-            </a>
             <button
               onClick={onClose}
               className="p-2 text-gray-400 hover:text-gray-600 text-xl"
@@ -179,6 +174,7 @@ export default function DocumentViewer({ document, onStatusChange, isAdmin = fal
             </div>
           )}
         </div>
+        {/* Action Buttons for recruiter */}
       </div>
     </div>
   )
