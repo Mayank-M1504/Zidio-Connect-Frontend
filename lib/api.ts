@@ -22,6 +22,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+function getToken() {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('token') || '';
+}
+
 export interface BaseRegisterRequest {
     name: string;
     email: string;
@@ -44,7 +49,7 @@ export type RegisterRequest = StudentRegisterRequest | RecruiterRegisterRequest;
 export interface LoginRequest {
     email: string;
     password: string;
-    role: 'STUDENT' | 'RECRUITER';
+    role: 'STUDENT' | 'RECRUITER' | 'ADMIN';
 }
 
 export interface AuthResponse {
@@ -475,7 +480,8 @@ export interface Job {
   description: string
   requirements: string
   adminApprovalStatus: string
-  // Add other fields as needed
+  companyLogo?: string
+  companyName?: string
 }
 
 export const getRecruiterJobs = async (): Promise<Job[]> => {
@@ -494,7 +500,7 @@ export const deleteRecruiterJob = async (jobId: number): Promise<any> => {
 };
 
 export const getAllJobs = async (): Promise<Job[]> => {
-  const response = await api.get('/api/admin/jobs');
+  const response = await api.get('/api/jobs');
   return response.data;
 };
 
@@ -523,12 +529,24 @@ export const updateApplicationStatus = async (applicationId: number, status: str
   });
 };
 
-export const getMessages = async (applicationId: number): Promise<any[]> => {
-  const response = await api.get(`/api/messages/${applicationId}`);
-  return response.data;
-};
+export async function getMessages(applicationId: number) {
+  const res = await fetch(`http://localhost:8080/api/messages/${applicationId}`, {
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch messages');
+  return res.json();
+}
 
-export const sendMessage = async (applicationId: number, content: string): Promise<any> => {
-  const response = await api.post('/api/messages', { applicationId, content });
-  return response.data;
-};
+export async function sendMessage(data: { receiverEmail: string, receiverRole: string, content: string, applicationId: number }) {
+  const res = await fetch('http://localhost:8080/api/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to send message');
+  return res.json();
+}

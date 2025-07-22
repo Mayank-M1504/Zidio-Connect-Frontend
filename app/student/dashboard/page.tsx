@@ -28,7 +28,6 @@ import { createOrUpdateStudentProfile, getCurrentStudentProfile, StudentProfileD
 import { Avatar, AvatarImage, AvatarFallback } from '../../../components/ui/avatar';
 import DocumentViewer from '../../../components/DocumentViewer';
 import MessageModal from '../../../components/MessageModal';
-// REMOVE: import { Dialog } from '@headlessui/react';
 
 // Utility to decode JWT and extract email
 function getEmailFromJWT() {
@@ -221,7 +220,57 @@ export default function StudentDashboard() {
   // Add state for Apply Now tooltip
   const [applyTooltipJobId, setApplyTooltipJobId] = useState<number | null>(null);
 
-  const [openChatAppId, setOpenChatAppId] = useState<number | null>(null);
+  // Add state for chat modal
+  const [chatAppId, setChatAppId] = useState<number|null>(null);
+  const [chatReceiverEmail, setChatReceiverEmail] = useState<string>('');
+  const [chatReceiverRole, setChatReceiverRole] = useState<string>('');
+
+  // Add state for job details modal
+  const [showJobDetailsModal, setShowJobDetailsModal] = useState(false);
+  const [jobDetails, setJobDetails] = useState<any>(null);
+
+  // Add state for filter expansion and filter values
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterLocation, setFilterLocation] = useState('');
+  const [filterDuration, setFilterDuration] = useState('');
+  const [filterStipendMin, setFilterStipendMin] = useState('');
+  const [filterStipendMax, setFilterStipendMax] = useState('');
+  const [sortBy, setSortBy] = useState('Newest');
+
+  // Get unique values for dropdowns from jobs list
+  const departmentOptions = Array.from(new Set(jobs.map(j => j.department).filter(Boolean)));
+  const locationOptions = Array.from(new Set(jobs.map(j => j.location).filter(Boolean)));
+  const durationOptions = Array.from(new Set(jobs.map(j => j.duration).filter(Boolean)));
+
+  // Filtering and sorting logic
+  const filteredAndSortedJobs = jobs
+    .filter((job) => job.adminApprovalStatus === 'APPROVED')
+    .filter((job) =>
+      (filterType === 'all' || job.jobType?.toLowerCase() === filterType) &&
+      (searchTerm === '' ||
+        job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.location?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (filterDepartment === '' || job.department === filterDepartment) &&
+      (filterLocation === '' || job.location === filterLocation) &&
+      (filterDuration === '' || job.duration === filterDuration) &&
+      (filterStipendMin === '' || parseInt(job.stipendSalary?.replace(/\D/g, '') || '0') >= parseInt(filterStipendMin)) &&
+      (filterStipendMax === '' || parseInt(job.stipendSalary?.replace(/\D/g, '') || '0') <= parseInt(filterStipendMax))
+    )
+    .sort((a, b) => {
+      if (sortBy === 'Newest') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      } else if (sortBy === 'Oldest') {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      } else if (sortBy === 'Highest Stipend') {
+        const aStipend = parseInt(a.stipendSalary?.replace(/\D/g, '') || '0');
+        const bStipend = parseInt(b.stipendSalary?.replace(/\D/g, '') || '0');
+        return bStipend - aStipend;
+      }
+      return 0;
+    });
 
   // Fetch profile on mount
   useEffect(() => {
@@ -385,6 +434,7 @@ export default function StudentDashboard() {
     }
   };
 
+  // Move these to the top, before any code that uses jobs
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [jobsError, setJobsError] = useState('');
@@ -438,7 +488,10 @@ export default function StudentDashboard() {
       if (!res.ok) throw new Error('Failed to apply');
       setApplySuccess('Application submitted successfully!');
       setShowApplyModal(false);
-      // Optionally refresh applications tab here
+      // Refresh applications list after applying
+      getMyApplications()
+        .then((data) => setMyApplications(Array.isArray(data) ? data : []))
+        .catch(() => {});
     } catch (err: any) {
       setApplyError(err.message || 'Failed to apply');
     } finally {
@@ -451,15 +504,14 @@ export default function StudentDashboard() {
   const [myApplicationsError, setMyApplicationsError] = useState('');
 
   useEffect(() => {
-    if (activeTab === 'applications') {
-      setMyApplicationsLoading(true);
-      setMyApplicationsError('');
-      getMyApplications()
-        .then((data) => setMyApplications(Array.isArray(data) ? data : []))
-        .catch((err) => setMyApplicationsError('Failed to load applications'))
-        .finally(() => setMyApplicationsLoading(false));
-    }
-  }, [activeTab]);
+    // Fetch applications on mount so the applications tab always has data
+    setMyApplicationsLoading(true);
+    setMyApplicationsError('');
+    getMyApplications()
+      .then((data) => setMyApplications(Array.isArray(data) ? data : []))
+      .catch((err) => setMyApplicationsError('Failed to load applications'))
+      .finally(() => setMyApplicationsLoading(false));
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -479,8 +531,16 @@ export default function StudentDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">Z</span>
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+                <Avatar className="w-10 h-10">
+                  {profile.profilePicture ? (
+                    <AvatarImage src={profile.profilePicture} alt="Profile" />
+                  ) : (
+                    <AvatarFallback>
+                      <User className="w-6 h-6 text-gray-400" />
+                    </AvatarFallback>
+                  )}
+                </Avatar>
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Student Dashboard</h1>
@@ -493,9 +553,6 @@ export default function StudentDashboard() {
             <div className="flex items-center space-x-4">
               <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
                 <Bell className="w-5 h-5" />
-              </button>
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                <Settings className="w-5 h-5" />
               </button>
               <button
                 onClick={handleLogout}
@@ -941,84 +998,10 @@ export default function StudentDashboard() {
 
             {/* Documents Tab */}
             {activeTab === "documents" && (
-              <div className="bg-white rounded-xl shadow-sm p-6 animate-in fade-in slide-in-from-right duration-300">
+              <div className="bg-white rounded-xl shadow-sm p-6 animate-in fade-in-from-right duration-300">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">My Documents</h2>
-
                 <div className="space-y-8">
-                  {/* Profile Picture Section */}
-                      <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Profile Picture</h3>
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                        <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                          <Avatar className="w-20 h-20">
-                            {profile.profilePicture ? (
-                              <AvatarImage src={profile.profilePicture} alt="Profile" />
-                            ) : profilePicFile ? (
-                              <AvatarImage src={URL.createObjectURL(profilePicFile)} alt="Profile" />
-                            ) : null}
-                            <AvatarFallback>
-                              <User className="w-8 h-8 text-gray-400" />
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                        {profile.profilePicture ? (
-                          <div className="flex items-center justify-center gap-2 mt-2">
-                            <button
-                              type="button"
-                              className="text-blue-600 hover:text-blue-700 font-medium"
-                              onClick={() => profilePicInputRef.current?.click()}
-                            >
-                              Change Picture
-                              </button>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-sm text-gray-600 mb-2">Upload your profile picture</p>
-                            <div className="flex items-center justify-center gap-2 mt-2">
-                              <button
-                                type="button"
-                                className="text-blue-600 hover:text-blue-700 font-medium"
-                                onClick={() => profilePicInputRef.current?.click()}
-                              >
-                                {profilePicFile ? "Change Picture" : "Select Picture"}
-                              </button>
-                              <button
-                                type="button"
-                                className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 font-medium disabled:opacity-50"
-                                disabled={!profilePicFile || profilePicUploading}
-                                onClick={async () => {
-                                  if (!profilePicFile) return;
-                                  setProfilePicUploading(true);
-                                  setProfilePicUploadStatus(null);
-                                  try {
-                                    await uploadStudentDocument(profilePicFile, 'profile_picture');
-                                    setProfilePicUploadStatus('Profile picture uploaded successfully!');
-                                  } catch (err: any) {
-                                    setProfilePicUploadStatus('Failed to upload profile picture: ' + (err.response?.data?.error || err.message));
-                                  } finally {
-                                    setProfilePicUploading(false);
-                                  }
-                                }}
-                              >
-                                {profilePicUploading ? 'Uploading...' : 'Upload'}
-                              </button>
-                            </div>
-                            {profilePicFile && (
-                              <div className="mt-1 text-xs text-gray-600">{profilePicFile.name}</div>
-                            )}
-                            {profilePicUploadStatus && (
-                              <div className={profilePicUploadStatus.includes('success') ? 'text-green-600' : 'text-red-600'}>
-                                {profilePicUploadStatus}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      {/* Uploaded preview/status can go here if needed */}
-                    </div>
-                      </div>
-
+                  {/* Profile Picture Section REMOVED */}
                   {/* Resume Section */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Resume</h3>
@@ -1379,7 +1362,7 @@ export default function StudentDashboard() {
               <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
                 {/* Search and Filter */}
                 <div className="bg-white rounded-xl shadow-sm p-6">
-                  <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex flex-col md:flex-row gap-4 items-center">
                     <div className="flex-1 relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                       <input
@@ -1402,9 +1385,93 @@ export default function StudentDashboard() {
                         <option value="full-time">Full-time</option>
                       </select>
                     </div>
+                    <button
+                      type="button"
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-gray-50 hover:bg-gray-100 font-medium flex items-center gap-2"
+                      onClick={() => setShowFilters((prev) => !prev)}
+                    >
+                      <span>Filters</span>
+                      <Filter className="w-4 h-4" />
+                    </button>
                   </div>
+                  {showFilters && (
+                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <select
+                          value={filterDepartment}
+                          onChange={(e) => setFilterDepartment(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="">All</option>
+                          {departmentOptions.map((dept) => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                        <select
+                          value={filterLocation}
+                          onChange={(e) => setFilterLocation(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="">All</option>
+                          {locationOptions.map((loc) => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                        <select
+                          value={filterDuration}
+                          onChange={(e) => setFilterDuration(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="">All</option>
+                          {durationOptions.map((dur) => (
+                            <option key={dur} value={dur}>{dur}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stipend Min</label>
+                        <input
+                          type="number"
+                          value={filterStipendMin}
+                          onChange={(e) => setFilterStipendMin(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          placeholder="e.g. 10000"
+                          min={0}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stipend Max</label>
+                        <input
+                          type="number"
+                          value={filterStipendMax}
+                          onChange={(e) => setFilterStipendMax(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          placeholder="e.g. 50000"
+                          min={0}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="Newest">Newest</option>
+                          <option value="Oldest">Oldest</option>
+                          <option value="Highest Stipend">Highest Stipend</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
                 {/* Job Listings */}
                 <div className="space-y-4">
                   {jobsLoading ? (
@@ -1412,110 +1479,101 @@ export default function StudentDashboard() {
                   ) : jobsError ? (
                     <div className="text-center text-red-500">{jobsError}</div>
                   ) : (
-                    jobs
-                      .filter((job) => job.adminApprovalStatus === 'APPROVED')
-                      .filter((job) =>
-                        (filterType === 'all' || job.jobType?.toLowerCase() === filterType) &&
-                        (searchTerm === '' ||
-                          job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          job.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          job.location?.toLowerCase().includes(searchTerm.toLowerCase()))
-                      )
-                      .map((job) => (
-                        <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
-                              <div className="flex items-center space-x-4 text-sm text-gray-600">
-                                <div className="flex items-center space-x-1">
-                                  <Building className="w-4 h-4" />
-                                  <span>{job.department}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <MapPin className="w-4 h-4" />
-                                  <span>{job.location}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <Clock className="w-4 h-4" />
-                                  <span>{job.duration}</span>
-                                </div>
+                    filteredAndSortedJobs.map((job) => (
+                      <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <div className="flex items-center mb-2">
+                              {job.companyLogo ? (
+                                <img src={job.companyLogo} alt="Company Logo" className="inline-block w-10 h-10 object-contain rounded mr-4 align-middle" />
+                              ) : (
+                                <div className="inline-block w-10 h-10 bg-gray-200 rounded mr-4 align-middle" />
+                              )}
+                              <div>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
+                                <div className="text-gray-600 text-sm">{job.companyName || ''}</div>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="flex items-center space-x-1 text-green-600 font-semibold">
-                                <DollarSign className="w-4 h-4" />
-                                <span>{job.stipendSalary}</span>
+                            <div className="flex items-center space-x-4 text-sm text-gray-600">
+                              <div className="flex items-center space-x-1">
+                                <Building className="w-4 h-4" />
+                                <span>{job.department}</span>
                               </div>
-                              <span
-                                className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                                  job.jobType === "Internship" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
-                                }`}
-                              >
-                                {job.jobType}
-                              </span>
+                              <div className="flex items-center space-x-1">
+                                <MapPin className="w-4 h-4" />
+                                <span>{job.location}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <Clock className="w-4 h-4" />
+                                <span>{job.duration}</span>
+                              </div>
                             </div>
                           </div>
-
-                          <p className="text-gray-600 mb-4">{job.description}</p>
-
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {job.requirements?.split(',').map((req: string, index: number) => (
-                              <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
-                                {req.trim()}
-                              </span>
-                            ))}
-                          </div>
-
-                          <div className="flex justify-between items-center">
-                            {/* <span className="text-sm text-gray-500">Posted {job.posted}</span> */}
-                            <div
-                              className="relative group"
-                              style={{ display: 'inline-block' }}
-                              onMouseEnter={() => setApplyTooltipJobId(job.id)}
-                              onMouseLeave={() => setApplyTooltipJobId(null)}
+                          <div className="text-right">
+                            <div className="flex items-center space-x-1 text-green-600 font-semibold">
+                              <DollarSign className="w-4 h-4" />
+                              <span>{job.stipendSalary}</span>
+                            </div>
+                            <span
+                              className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                                job.jobType === "Internship" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                              }`}
                             >
-                              {(() => {
-                                // Check if already applied
-                                const alreadyApplied = myApplications.some(
-                                  (app) => app.jobId === job.id || app.job?.id === job.id
-                                );
-                                const disabled = alreadyApplied || !isProfileComplete(profile) || !areDocumentsVerified(uploadedDocuments);
-                                let tooltipMsg = '';
-                                if (alreadyApplied) {
-                                  tooltipMsg = 'You have already applied to this job.';
-                                } else if (!isProfileComplete(profile) && !areDocumentsVerified(uploadedDocuments)) {
-                                  tooltipMsg = 'Please complete your profile and upload all required, approved documents to apply.';
-                                } else if (!isProfileComplete(profile)) {
-                                  tooltipMsg = 'Please complete your profile to apply.';
-                                } else if (!areDocumentsVerified(uploadedDocuments)) {
-                                  tooltipMsg = 'All required documents must be uploaded and approved to apply.';
-                                }
-                                return (
-                                  <>
-                                    <button
-                                      className={`bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      onClick={() => (!disabled && handleApplyNow(job))}
-                                      disabled={disabled}
-                                      tabIndex={0}
-                                      style={{ pointerEvents: !disabled ? 'auto' : 'none' }}
-                                    >
-                                      Apply Now
-                                    </button>
-                                    {applyTooltipJobId === job.id && tooltipMsg && (
-                                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 flex flex-col items-center" style={{ minWidth: 240 }}>
-                                        <div className="relative bg-yellow-100 text-yellow-900 text-xs rounded-xl px-3 py-2 shadow-lg border border-yellow-400 font-medium animate-fade-in" style={{ boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }}>
-                                          {tooltipMsg}
-                                          <span className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-yellow-100"></span>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
+                              {job.jobType}
+                </span>
                           </div>
                         </div>
-                      ))
+
+                        <div className="flex justify-between items-center">
+                          {/* <span className="text-sm text-gray-500">Posted {job.posted}</span> */}
+                          <div
+                            className="relative group"
+                            style={{ display: 'inline-block' }}
+                            onMouseEnter={() => setApplyTooltipJobId(job.id)}
+                            onMouseLeave={() => setApplyTooltipJobId(null)}
+                          >
+                            {(() => {
+                              // Check if already applied
+                              const alreadyApplied = myApplications.some(
+                                (app) => app.jobId === job.id || app.job?.id === job.id
+                              );
+                              const disabled = alreadyApplied || !isProfileComplete(profile) || !areDocumentsVerified(uploadedDocuments);
+                              let tooltipMsg = '';
+                              if (alreadyApplied) {
+                                tooltipMsg = 'You have already applied to this job.';
+                              } else if (!isProfileComplete(profile) && !areDocumentsVerified(uploadedDocuments)) {
+                                tooltipMsg = 'Please complete your profile and upload all required, approved documents to apply.';
+                              } else if (!isProfileComplete(profile)) {
+                                tooltipMsg = 'Please complete your profile to apply.';
+                              } else if (!areDocumentsVerified(uploadedDocuments)) {
+                                tooltipMsg = 'All required documents must be uploaded and approved to apply.';
+                              }
+                              return (
+                                <>
+                                  <button
+                                    className={`bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    onClick={() => { if (!disabled) { setJobDetails(job); setShowJobDetailsModal(true); } }}
+                                    disabled={disabled}
+                                    tabIndex={0}
+                                    style={{ pointerEvents: !disabled ? 'auto' : 'none' }}
+                                  >
+                                    View
+                                  </button>
+                                  {applyTooltipJobId === job.id && tooltipMsg && (
+                                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 flex flex-col items-center" style={{ minWidth: 240 }}>
+                                      <div className="relative bg-yellow-100 text-yellow-900 text-xs rounded-xl px-3 py-2 shadow-lg border border-yellow-400 font-medium animate-fade-in" style={{ boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }}>
+                                        {tooltipMsg}
+                                        <span className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-yellow-100"></span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
@@ -1532,179 +1590,250 @@ export default function StudentDashboard() {
                     <div className="text-center text-red-500">{myApplicationsError}</div>
                   ) : myApplications.length === 0 ? (
                     <div className="text-center text-gray-500">You have not applied to any jobs yet.</div>
-                  ) : (
-                    myApplications.map((app) => (
-                      <div
-                        key={app.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{app.jobTitle || app.job?.title}</h3>
-                            <p className="text-gray-600 mb-2">{app.company || app.job?.companyName}</p>
-                            <p className="text-sm text-gray-500">Applied on {app.appliedAt ? new Date(app.appliedAt).toLocaleDateString() : ''}</p>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.status === 'Shortlisted' ? 'bg-green-100 text-green-700' : app.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                              {app.status}
-                            </span>
-                            {/* Chat button for Shortlisted applications */}
-                            {app.status === 'SHORTLISTED' && (
-                              <button
-                                className="p-2 text-blue-600 hover:text-blue-800"
-                                title="Chat with Recruiter"
-                                onClick={() => setOpenChatAppId(app.id)}
-                              >
-                                <MessageCircle className="w-5 h-5" />
-                              </button>
-                            )}
-                          </div>
+                  ) : myApplications.map((app) => (
+                    <div
+                      key={app.id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-1">{app.jobTitle || app.job?.title}</h3>
+                          <p className="text-gray-600 mb-2">{app.company || app.job?.companyName}</p>
+                          <p className="text-sm text-gray-500">Applied on {app.appliedAt ? new Date(app.appliedAt).toLocaleDateString() : ''}</p>
                         </div>
-                        {/* Optionally add a button to view more details */}
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.status === 'Shortlisted' ? 'bg-green-100 text-green-700' : app.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {app.status}
+                          </span>
+                        </div>
                       </div>
-                    ))
-                  )}
+                      {/* Optionally add a button to view more details */}
+                    </div>
+                  ))}
                 </div>
-                {/* Chat Modal */}
-                {openChatAppId && (
-                  <MessageModal
-                    applicationId={openChatAppId}
-                    onClose={() => setOpenChatAppId(null)}
-                    userRole="STUDENT"
-                  />
-                )}
               </div>
             )}
           </div>
         </div>
       </div>
       {/* Application Modal */}
-      {showApplyModal && (
+      {showApplyModal && applyJob && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full mx-auto p-8 border border-gray-200 animate-in fade-in slide-in-from-bottom duration-300">
-            <div className="flex justify-between items-center mb-4">
+          <div className="relative bg-white rounded-none shadow-xl w-full h-full p-0 border-0 animate-in fade-in-from-bottom duration-300 flex flex-col">
+            <div className="flex justify-between items-center px-8 py-6 border-b">
               <div className="text-2xl font-bold text-gray-900">Review Your Application</div>
               <button
                 className="text-gray-400 hover:text-gray-600 transition-colors"
                 onClick={() => setShowApplyModal(false)}
-                aria-label="Close"
               >
-                <XCircle className="w-6 h-6" />
+                <span className="text-2xl">&times;</span>
               </button>
             </div>
-            {/* Profile Section */}
-            <div className="col-span-2 text-lg font-semibold text-gray-800 mt-2 mb-2 border-l-4 border-blue-500 pl-2">Profile</div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
-                  {profile.firstName} {profile.lastName}
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className="grid md:grid-cols-2 gap-8 mb-8">
+                {/* Profile Section */}
+                <div className="relative mb-8">
+                  <div className="flex items-center justify-between mb-4 border-b pb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">Profile</h3>
+                    <button
+                      className="px-4 py-1 rounded border border-blue-500 text-blue-600 bg-white hover:bg-blue-50 font-medium text-sm shadow-sm transition-all duration-150"
+                      style={{ minWidth: 120 }}
+                      onClick={() => { setShowApplyModal(false); setActiveTab('profile'); }}
+                    >
+                      Edit Profile
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">First Name:</p>
+                      <p className="text-sm text-gray-900">{profile.firstName}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Last Name:</p>
+                      <p className="text-sm text-gray-900">{profile.lastName}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Email:</p>
+                      <p className="text-sm text-gray-900">{jwtEmail}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Phone:</p>
+                      <p className="text-sm text-gray-900">{profile.phone}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">College:</p>
+                      <p className="text-sm text-gray-900">{profile.college}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Course:</p>
+                      <p className="text-sm text-gray-900">{profile.course}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Year of Study:</p>
+                      <p className="text-sm text-gray-900">{profile.yearOfStudy}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">GPA:</p>
+                      <p className="text-sm text-gray-900">{profile.gpa}</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Documents Section */}
+                <div className="relative mb-8">
+                  <div className="flex items-center justify-between mb-4 border-b pb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">Documents</h3>
+                    <button
+                      className="px-4 py-1 rounded border border-blue-500 text-blue-600 bg-white hover:bg-blue-50 font-medium text-sm shadow-sm transition-all duration-150"
+                      style={{ minWidth: 120 }}
+                      onClick={() => { setShowApplyModal(false); setActiveTab('documents'); }}
+                    >
+                      Edit Documents
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Resume:</p>
+                      {uploadedDocuments.documents.filter((d: any) => d.type === 'resume').length > 0 ? (
+                        uploadedDocuments.documents.filter((d: any) => d.type === 'resume').map((doc: any) => (
+                          <div key={doc.id} className="flex items-center gap-2">
+                            <span className="text-sm text-gray-900">{doc.fileName}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-500">Not uploaded</span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Marksheet:</p>
+                      {uploadedDocuments.documents.filter((d: any) => d.type === 'marksheet').length > 0 ? (
+                        uploadedDocuments.documents.filter((d: any) => d.type === 'marksheet').map((doc: any) => (
+                          <div key={doc.id} className="flex items-center gap-2">
+                            <span className="text-sm text-gray-900">{doc.fileName}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-500">Not uploaded</span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Identity Proof:</p>
+                      {uploadedDocuments.documents.filter((d: any) => d.type === 'identity_proof').length > 0 ? (
+                        uploadedDocuments.documents.filter((d: any) => d.type === 'identity_proof').map((doc: any) => (
+                          <div key={doc.id} className="flex items-center gap-2">
+                            <span className="text-sm text-gray-900">{doc.fileName}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-500">Not uploaded</span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Certificates:</p>
+                      {uploadedDocuments.certificates.length > 0 ? (
+                        uploadedDocuments.certificates.map((cert: any) => (
+                          <div key={cert.id} className="flex items-center gap-2">
+                            <span className="text-sm text-gray-900">{cert.certificateName}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-500">None</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
-                  {jwtEmail}
+              {/* Recruiter Question Section (if present) */}
+              {applyJob.questionForApplicant && (
+                <div className="mb-6">
+                  <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium mb-2">
+                    {applyJob.questionForApplicant}
+                  </div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Your Answer</label>
+                  <div className="relative">
+                    <textarea
+                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                      placeholder="Your answer..."
+                      value={applicantAnswer}
+                      onChange={(e) => setApplicantAnswer(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
-                  {profile.phone}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">College</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
-                  {profile.college}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Course</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
-                  {profile.course}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text">
-                  {profile.yearOfStudy}
-                </div>
+              )}
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-4 mt-8">
+                <button
+                  className="px-6 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+                  disabled={applyLoading || (applyJob.questionForApplicant && !applicantAnswer.trim())}
+                  onClick={handleSubmitApplication}
+                >
+                  {applyLoading ? "Submitting..." : "Submit Application"}
+                </button>
               </div>
             </div>
-            <div className="col-span-2 flex justify-end mb-6">
+          </div>
+        </div>
+      )}
+      <MessageModal
+        applicationId={chatAppId ?? 0}
+        receiverEmail={chatReceiverEmail}
+        receiverRole={chatReceiverRole}
+        isOpen={chatAppId !== null}
+        onClose={() => setChatAppId(null)}
+        currentUserEmail={jwtEmail}
+        currentUserRole={'STUDENT'}
+      />
+      {showJobDetailsModal && jobDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="relative bg-white rounded-none shadow-xl w-full h-full p-0 border-0 animate-in fade-in-from-bottom duration-300 flex flex-col">
+            <div className="flex justify-between items-center px-8 py-6 border-b">
+              <div className="text-2xl font-bold text-gray-900">Job Details</div>
               <button
-                className="px-3 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium border border-blue-200 transition"
-                onClick={() => { setShowApplyModal(false); setActiveTab('profile'); }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={() => setShowJobDetailsModal(false)}
               >
-                Edit Profile
+                <span className="text-2xl">&times;</span>
               </button>
             </div>
-            {/* Documents Section */}
-            <div className="col-span-2 text-lg font-semibold text-gray-800 mt-2 mb-2 border-l-4 border-blue-500 pl-2">Documents</div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Resume</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text truncate">
-                  {uploadedDocuments.documents.find((d: any) => d.type === 'resume')?.name || 'Not uploaded'}
+            <div className="flex-1 overflow-y-auto px-0 py-0 flex flex-col pb-12">
+              <div className="flex flex-col md:flex-row h-full w-full">
+                {/* Left: Job Description */}
+                <div className="flex-1 flex flex-col items-start px-12 py-12 border-r border-gray-200 min-h-0 pt-8">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-4 mt-0">{jobDetails.title}</h2>
+                  <div className="mb-2 text-xl text-gray-700 font-medium">
+                    {jobDetails.companyName || jobDetails.company || (jobDetails.recruiter && jobDetails.recruiter.company) || ''}
+                  </div>
+                  <h3 className="text-xl font-bold text-blue-700 mb-2 mt-0">Job Description</h3>
+                  <div className="bg-gray-50 border border-gray-200 rounded px-4 py-4 text-gray-900 text-base whitespace-pre-line w-full mb-4">
+                    {jobDetails.description}
+                  </div>
+                </div>
+                {/* Right: Skills */}
+                <div className="flex-1 flex flex-col items-start px-12 py-12 min-h-0 pt-8">
+                  <h3 className="text-xl font-bold text-blue-700 mb-2 mt-0">Required Skills</h3>
+                  {jobDetails.requirements ? (
+                    <ul className="list-disc ml-6 space-y-2 text-lg mb-4">
+                      {jobDetails.requirements.split(',').map((skill: string, idx: number) => (
+                        <li key={idx} className="text-gray-700">{skill.trim()}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-gray-500 mb-4">No skills listed.</div>
+                  )}
+                  <div className="flex justify-end w-full mt-12">
+                    <button
+                      className="px-8 py-3 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition disabled:opacity-50 text-lg"
+                      onClick={() => { setShowJobDetailsModal(false); setApplyJob(jobDetails); setShowApplyModal(true); }}
+                    >
+                      Apply Now
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Marksheet</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text truncate">
-                  {uploadedDocuments.documents.find((d: any) => d.type === 'marksheet')?.name || 'Not uploaded'}
-                </div>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Certificates</label>
-                <div className="bg-gray-100 border border-gray-200 rounded px-3 py-2 text-gray-900 text-base font-medium cursor-not-allowed select-text truncate">
-                  {uploadedDocuments.certificates?.length > 0 ? uploadedDocuments.certificates.map((c: any) => c.certificateName).join(', ') : 'None'}
-                </div>
-              </div>
             </div>
-            <div className="col-span-2 flex justify-end mb-6">
-              <button
-                className="px-3 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium border border-blue-200 transition"
-                onClick={() => { setShowApplyModal(false); setActiveTab('documents'); }}
-              >
-                Edit Documents
-              </button>
-            </div>
-            {/* Recruiter Question Section (if present) */}
-            {applyJob?.questionForApplicant && (
-              <div className="col-span-2 mb-6">
-                <div className="text-xs text-gray-500 mb-1">Recruiter's Question</div>
-                <div className="text-base text-gray-800 mb-1">{applyJob.questionForApplicant}</div>
-                <textarea
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                  placeholder="Your answer..."
-                  value={applicantAnswer}
-                  onChange={e => setApplicantAnswer(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            )}
-            {/* Actions */}
-            <div className="flex justify-end gap-4 mt-2">
-              <button
-                className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors text-base"
-                onClick={() => setShowApplyModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2 rounded-lg hover:shadow-lg transition-all duration-200 font-semibold text-base"
-                onClick={handleSubmitApplication}
-                disabled={applyLoading || (applyJob?.questionForApplicant && !applicantAnswer.trim())}
-              >
-                {applyLoading ? 'Applying...' : 'Submit Application'}
-              </button>
-            </div>
-            {applyError && <div className="text-red-600 mt-2 text-base">{applyError}</div>}
-            {applySuccess && <div className="text-green-600 mt-2 text-base">{applySuccess}</div>}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }

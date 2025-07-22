@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useRouter } from "next/navigation";
 import {
   Menu,
   X,
@@ -28,7 +28,7 @@ export default function LandingPage() {
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
   const [currentCompany, setCurrentCompany] = useState(0)
   const [isVisible, setIsVisible] = useState({})
-  const navigate = useNavigate()
+  const router = useRouter();
 
   // Enhanced stats with animations
   const [animatedStats, setAnimatedStats] = useState({
@@ -278,7 +278,7 @@ export default function LandingPage() {
             </nav>
 
             <button
-              onClick={() => navigate("/auth")}
+              onClick={() => router.push("/auth")}
               className="hidden md:block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 animate-in fade-in slide-in-from-right duration-700"
             >
               Get Started
@@ -328,7 +328,7 @@ export default function LandingPage() {
                   Contact
                 </a>
                 <button
-                  onClick={() => navigate("/auth")}
+                  onClick={() => router.push("/auth")}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg w-fit transform hover:scale-105 transition-all duration-300"
                 >
                   Get Started
@@ -361,7 +361,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center animate-in fade-in slide-in-from-bottom duration-1000 delay-600">
               <button
-                onClick={() => navigate("/auth")}
+                onClick={() => router.push("/auth")}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group"
               >
                 Visit Our Website
@@ -642,7 +642,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={() => navigate("/auth")}
+                onClick={() => router.push("/auth")}
                 className="bg-white text-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group"
               >
                 Join Now - It's Free!
