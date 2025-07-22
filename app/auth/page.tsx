@@ -39,6 +39,7 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
+    setIsLoading(true)
 
     try {
       if (isLogin) {
@@ -46,7 +47,7 @@ export default function AuthPage() {
         const loginData = {
           email: formData.email,
           password: formData.password,
-          role: activeTab.toUpperCase() as 'STUDENT' | 'RECRUITER'
+          role: activeTab.toUpperCase() as 'STUDENT' | 'RECRUITER' | 'ADMIN'
         }
 
         console.log('Attempting login with:', JSON.stringify(loginData, null, 2))
@@ -59,8 +60,10 @@ export default function AuthPage() {
         // Redirect based on role
         if (activeTab === 'student') {
           router.push('/student/dashboard')
-        } else {
+        } else if (activeTab === 'recruiter') {
           router.push('/recruiter/dashboard')
+        } else if (activeTab === 'admin') {
+          router.push('/admin-panel')
         }
     } else {
         // Handle registration
@@ -323,6 +326,7 @@ export default function AuthPage() {
           </form>
 
           {/* Toggle Login/Register */}
+          {!(activeTab === 'admin') && (
           <div className="text-center mt-6">
             <p className="text-gray-600">
               {isLogin ? "Don't have an account?" : "Already have an account?"}
@@ -334,6 +338,7 @@ export default function AuthPage() {
               </button>
             </p>
           </div>
+          )}
           {/* Forgot Password Overlay */}
           {showForgotPassword && (
             <div className="absolute inset-0 bg-white rounded-2xl flex flex-col justify-center p-8 animate-in fade-in slide-in-from-right duration-300">

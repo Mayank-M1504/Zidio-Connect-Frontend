@@ -1,7 +1,7 @@
-"use client"
+ "use client"
 
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useRouter } from "next/navigation";
 import {
   Users,
   Briefcase,
@@ -24,7 +24,7 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState("overview")
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
-  const navigate = useNavigate()
+  const router = useRouter();
 
   // Dummy data
   const adminProfile = {
@@ -169,7 +169,7 @@ export default function AdminPanel() {
                 <Settings className="w-5 h-5" />
               </button>
               <button
-                onClick={() => navigate("/")}
+                onClick={() => router.push("/")}
                 className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors"
               >
                 <LogOut className="w-4 h-4" />

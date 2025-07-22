@@ -46,7 +46,7 @@ export default function AuthPage() {
         const loginData = {
           email: formData.email,
           password: formData.password,
-          role: activeTab.toUpperCase() as 'STUDENT' | 'RECRUITER'
+          role: activeTab.toUpperCase() as 'STUDENT' | 'RECRUITER' | 'ADMIN'
         }
 
         console.log('Attempting login with:', JSON.stringify(loginData, null, 2))
@@ -59,8 +59,10 @@ export default function AuthPage() {
         // Redirect based on role
         if (activeTab === 'student') {
           router.push('/student/dashboard')
-        } else {
+        } else if (activeTab === 'recruiter') {
           router.push('/recruiter/dashboard')
+        } else if (activeTab === 'admin') {
+          router.push('/admin-panel')
         }
     } else {
         // Handle registration

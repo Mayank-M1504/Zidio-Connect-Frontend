@@ -23,11 +23,10 @@ import {
   Shield,
   BookOpen,
   AlertCircle,
-  MessageCircle,
 } from "lucide-react"
 import { getCurrentRecruiterProfile, RecruiterProfileData, updateRecruiterProfile, getRecruiterDocuments, deleteRecruiterDocument, getRecruiterJobs, Job, postRecruiterJob, deleteRecruiterJob, uploadRecruiterCompanyLogo, getApplicationsForJob, updateApplicationStatus } from "@/lib/api";
 import DocumentViewer from "../../../components/DocumentViewer"
-import MessageModal from "../../../components/MessageModal";
+import MessageModal from '../../../components/MessageModal';
 
 interface LocalJob {
   id: number
@@ -39,6 +38,7 @@ interface LocalJob {
   applicants: number
   posted: string
   status: string
+  adminApprovalStatus: string
 }
 
 interface Applicant {
@@ -134,12 +134,42 @@ export default function RecruiterDashboard() {
   const [recruiterDocuments, setRecruiterDocuments] = useState<any[]>([]);
   const [docLoading, setDocLoading] = useState(true);
 
+  // Function to calculate stats
+  const calculateStats = () => {
+    const totalApplicants = applicants.length;
+    const shortlistedApplicants = applicants.filter(app => 
+      app.status === 'Shortlisted' || 
+      app.status === 'SHORTLISTED' || 
+      app.status === 'shortlisted'
+    ).length;
+    const rejectedApplicants = applicants.filter(app => 
+      app.status === 'Rejected' || 
+      app.status === 'REJECTED' || 
+      app.status === 'rejected'
+    ).length;
+    const appliedApplicants = applicants.filter(app => 
+      app.status === 'Applied' || 
+      app.status === 'APPLIED' || 
+      app.status === 'applied'
+    ).length;
+    
+    return {
+      totalApplicants,
+      shortlistedApplicants,
+      rejectedApplicants,
+      appliedApplicants
+    };
+  };
+
   useEffect(() => {
     getCurrentRecruiterProfile()
-      .then((data) => setProfileForm(data))
+      .then((data) => {
+        setProfileForm(data);
+      })
       .finally(() => setLoading(false));
     // Fetch recruiter jobs
-    getRecruiterJobs().then((jobs) => setPostedJobs(jobs.map((job: any) => ({
+    getRecruiterJobs().then((jobs) => {
+      setPostedJobs(jobs.map((job: any) => ({
       id: job.id,
       title: job.title,
       department: job.department,
@@ -149,7 +179,9 @@ export default function RecruiterDashboard() {
       applicants: job.applicants || 0,
       posted: job.posted || '',
       status: job.adminApprovalStatus || '',
-    }))));
+        adminApprovalStatus: job.adminApprovalStatus || '',
+      })));
+    });
     // Fetch recruiter documents
     getRecruiterDocuments()
       .then((docs) => setRecruiterDocuments(docs))
@@ -202,6 +234,27 @@ export default function RecruiterDashboard() {
 
   const handleJobFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if profile data is still loading
+    if (loading) {
+      alert("Please wait while your profile data is loading...");
+      return;
+    }
+    
+
+    
+    // Check if profile is complete
+    if (!isProfileComplete(profileForm)) {
+      alert("Please complete your profile before posting a job. Required fields: First Name, Last Name, Email, Phone, and Company Name.");
+      return;
+    }
+    
+    // Check if required documents are approved
+    if (!areDocsApproved(recruiterDocuments)) {
+      alert("All required documents (Registration, GST, PAN, Business) must be uploaded and approved by admin before posting a job.");
+      return;
+    }
+    
     try {
       await postRecruiterJob({
         title: jobForm.title,
@@ -225,6 +278,7 @@ export default function RecruiterDashboard() {
         applicants: job.applicants || 0,
         posted: job.posted || '',
         status: job.adminApprovalStatus || '',
+        adminApprovalStatus: job.adminApprovalStatus || '',
       }))));
       setShowJobForm(false);
       setJobForm({
@@ -238,17 +292,25 @@ export default function RecruiterDashboard() {
         requirements: "",
         questionForApplicant: "",
       });
-    } catch (err) {
-      alert("Failed to post job. Please try again.");
+    } catch (err: any) {
+      console.error('Job posting error:', err);
+      console.error('Error response data:', err.response?.data);
+      console.error('Error response status:', err.response?.status);
+      const errorMessage = err.response?.data || err.message || "Failed to post job. Please try again.";
+      alert(`Failed to post job: ${errorMessage}`);
     }
   };
 
   const filteredApplicants = applicants.filter((applicant) => {
+    const search = searchTerm.toLowerCase();
     const matchesSearch =
-      applicant.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      applicant.jobTitle.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filterStatus === "all" || applicant.status.toLowerCase() === filterStatus
-    return matchesSearch && matchesFilter
+      (applicant.studentName && applicant.studentName.toLowerCase().includes(search)) ||
+      (applicant.name && applicant.name.toLowerCase().includes(search)) ||
+      (applicant.email && applicant.email.toLowerCase().includes(search)) ||
+      (applicant.jobTitle && applicant.jobTitle.toLowerCase().includes(search)) ||
+      (applicant.college && applicant.college.toLowerCase().includes(search));
+    const matchesFilter = filterStatus === "all" || (applicant.status && applicant.status.toLowerCase() === filterStatus);
+    return matchesSearch && matchesFilter;
   })
 
   const getStatusColor = (status: string) => {
@@ -294,6 +356,7 @@ export default function RecruiterDashboard() {
         applicants: job.applicants || 0,
         posted: job.posted || '',
         status: job.adminApprovalStatus || '',
+        adminApprovalStatus: job.adminApprovalStatus || '',
       }))));
     } catch (err) {
       alert("Failed to delete job. Please try again.");
@@ -330,7 +393,7 @@ export default function RecruiterDashboard() {
   };
 
   function isProfileComplete(profile: any) {
-    return profile.firstName && profile.lastName && profile.email && profile.phone && profile.companyName;
+    return !!(profile.firstName && profile.lastName && profile.email && profile.phone && profile.companyName);
   }
   function areDocsApproved(docs: any[]) {
     const required = ["registration", "gst", "pan", "business"];
@@ -373,8 +436,10 @@ export default function RecruiterDashboard() {
     return '';
   }
 
-  const [showChatModal, setShowChatModal] = useState(false);
-  const [chatApplicationId, setChatApplicationId] = useState<number | null>(null);
+  // Add state for chat modal
+  const [chatAppId, setChatAppId] = useState<number|null>(null);
+  const [chatReceiverEmail, setChatReceiverEmail] = useState<string>('');
+  const [chatReceiverRole, setChatReceiverRole] = useState<string>('');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -384,7 +449,11 @@ export default function RecruiterDashboard() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
               <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">Z</span>
+                {companyLogo ? (
+                  <img src={companyLogo} alt="Company Logo" className="w-10 h-10 object-contain rounded-lg" />
+                ) : (
+                  <span className="text-white font-bold text-xl">Z</span>
+                )}
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Recruiter Dashboard</h1>
@@ -397,9 +466,6 @@ export default function RecruiterDashboard() {
             <div className="flex items-center space-x-4">
               <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
                 <Bell className="w-5 h-5" />
-              </button>
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                <Settings className="w-5 h-5" />
               </button>
               <button
                 onClick={handleLogout}
@@ -429,7 +495,7 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Applicants</p>
-                <p className="text-2xl font-bold text-gray-900">{applicants.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{calculateStats().totalApplicants}</p>
               </div>
               <Users className="w-8 h-8 text-green-600" />
             </div>
@@ -438,9 +504,7 @@ export default function RecruiterDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Shortlisted</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {applicants.filter(app => app.status === 'Shortlisted').length}
-                </p>
+                <p className="text-2xl font-bold text-gray-900">{calculateStats().shortlistedApplicants}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-purple-600" />
             </div>
@@ -448,16 +512,12 @@ export default function RecruiterDashboard() {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">This Month</p>
+                <p className="text-sm text-gray-600">Rejected</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {postedJobs.filter(job => {
-                    const jobDate = new Date(job.posted)
-                    const now = new Date()
-                    return jobDate.getMonth() === now.getMonth() && jobDate.getFullYear() === now.getFullYear()
-                  }).length}
+                  {calculateStats().rejectedApplicants}
                 </p>
               </div>
-              <Calendar className="w-8 h-8 text-orange-600" />
+              <XCircle className="w-8 h-8 text-red-600" />
             </div>
           </div>
         </div>
@@ -876,12 +936,12 @@ export default function RecruiterDashboard() {
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
                                 className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                  job.adminApprovalStatus === "APPROVED"
+                                  job.status === "APPROVED" || job.status === "approved"
                                     ? "bg-green-100 text-green-800"
                                     : "bg-yellow-100 text-yellow-800"
                                 }`}
                               >
-                                {job.adminApprovalStatus === "APPROVED" ? "Approved" : "Pending"}
+                                {job.status === "APPROVED" || job.status === "approved" ? "Approved" : "Pending"}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -940,72 +1000,50 @@ export default function RecruiterDashboard() {
 
                 {/* Applicants List */}
                 <div className="space-y-4">
-                  {filteredApplicants.map((applicant) => (
-                    <div
-                      key={applicant.id}
-                      className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => setSelectedApplicant(applicant)}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">{applicant.studentName}</h3>
-                          <p className="text-gray-600 mb-1">{applicant.studentEmail}</p>
-                          <p className="text-sm text-gray-500 mb-2">{applicant.college}</p>
-                          <p className="text-sm font-medium text-blue-600">{applicant.jobTitle}</p>
-                        </div>
-                        <div className="text-right">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(applicant.status)}`}
-                          >
-                            {applicant.status}
-                          </span>
-                          {applicant.status.toLowerCase() === "shortlisted" && (
-                            <button
-                              className="ml-2 text-blue-600 hover:text-blue-800"
-                              title="Open Chat"
-                              onClick={e => {
-                                e.stopPropagation();
-                                setChatApplicationId(applicant.id);
-                                setShowChatModal(true);
-                              }}
-                            >
-                              <MessageCircle className="w-5 h-5" />
-                            </button>
-                          )}
-                          <p className="text-sm text-gray-500 mt-1">Applied: {applicant.appliedAt ? new Date(applicant.appliedAt).toLocaleDateString() : 'N/A'}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {Array.isArray(applicant.skills) && applicant.skills.length > 0 ? (
-                          applicant.skills.map((skill, index) => (
-                            <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-sm">
-                              {skill}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-400">No skills listed</span>
-                        )}
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <button className="text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1">
-                          <Download className="w-4 h-4" />
-                          <span>{applicant.resume?.name || 'No Resume'}</span>
-                        </button>
-                        <div className="flex space-x-2">
-                          <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-1">
-                            <CheckCircle className="w-4 h-4" />
-                            <span>Shortlist</span>
-                          </button>
-                          <button className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-1">
-                            <XCircle className="w-4 h-4" />
-                            <span>Reject</span>
-                          </button>
-                        </div>
-                      </div>
+                  {filteredApplicants.length === 0 ? (
+                    <div className="text-center text-gray-500">
+                      {searchTerm
+                        ? `No applications found for "${searchTerm}"`
+                        : "No applications found."}
                     </div>
-                  ))}
+                  ) : (
+                    filteredApplicants.map((applicant) => (
+                      <div
+                        key={applicant.id}
+                        className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => setSelectedApplicant(applicant)}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{applicant.studentName}</h3>
+                            <p className="text-gray-600 mb-1">{applicant.studentEmail}</p>
+                            <p className="text-sm text-gray-500 mb-2">{applicant.college}</p>
+                            <p className="text-sm font-medium text-blue-600">{applicant.jobTitle}</p>
+                          </div>
+                          <div className="text-right">
+                            <span
+                              className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(applicant.status)}`}
+                            >
+                              {applicant.status}
+                            </span>
+                            <p className="text-sm text-gray-500 mt-1">Applied: {applicant.appliedAt ? new Date(applicant.appliedAt).toLocaleDateString() : 'N/A'}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <div className="flex space-x-2">
+                            <button 
+                              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                              onClick={() => setSelectedApplicant(applicant)}
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>View Application</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -1224,7 +1262,7 @@ export default function RecruiterDashboard() {
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
           <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-2xl relative">
             <button
-              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
               onClick={() => setSelectedApplicant(null)}
             >
               &times;
@@ -1354,25 +1392,30 @@ export default function RecruiterDashboard() {
               >
                 {statusUpdating ? "Updating..." : "Reject"}
               </button>
-              <button
-                className="px-6 py-2 rounded bg-green-500 text-white font-semibold hover:bg-green-600 transition disabled:opacity-50"
-                disabled={statusUpdating}
-                onClick={() => handleStatusUpdate("SHORTLISTED")}
-              >
-                {statusUpdating ? "Updating..." : "Shortlist"}
-              </button>
+              {selectedApplicant.status !== 'SHORTLISTED' && (
+                <button
+                  className="px-6 py-2 rounded bg-green-500 text-white font-semibold hover:bg-green-600 transition disabled:opacity-50"
+                  disabled={statusUpdating}
+                  onClick={() => handleStatusUpdate("SHORTLISTED")}
+                >
+                  {statusUpdating ? "Updating..." : "Shortlist"}
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {showChatModal && chatApplicationId && (
+      {/* Message Modal */}
         <MessageModal
-          applicationId={chatApplicationId}
-          onClose={() => setShowChatModal(false)}
+        applicationId={chatAppId ?? 0}
+        receiverEmail={chatReceiverEmail}
+        receiverRole={chatReceiverRole}
+        isOpen={chatAppId !== null}
+        onClose={() => setChatAppId(null)}
+        currentUserEmail={profileForm.email} // Assuming recruiter's email is in profileForm
+        currentUserRole={'RECRUITER'}
         />
-      )}
     </div>
   )
 }
-    

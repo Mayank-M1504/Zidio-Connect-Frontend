@@ -1,98 +1,130 @@
-import React, { useEffect, useRef, useState } from "react";
-import { getMessages, sendMessage } from "@/lib/api";
-import { XCircle, Send } from "lucide-react";
+import React, { useEffect, useState, useRef } from 'react';
+import { getMessages, sendMessage } from '../lib/api';
+
+interface Message {
+  id: number;
+  senderEmail: string;
+  senderRole: string;
+  receiverEmail: string;
+  receiverRole: string;
+  content: string;
+  sentAt: string;
+  applicationId: number;
+}
 
 interface MessageModalProps {
   applicationId: number;
+  receiverEmail: string;
+  receiverRole: string;
+  isOpen: boolean;
   onClose: () => void;
+  currentUserEmail: string;
+  currentUserRole: string;
 }
 
-export default function MessageModal({ applicationId, onClose }: MessageModalProps) {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [input, setInput] = useState("");
+const MessageModal: React.FC<MessageModalProps> = ({ applicationId, receiverEmail, receiverRole, isOpen, onClose, currentUserEmail, currentUserRole }) => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) fetchMessages();
+    // eslint-disable-next-line
+  }, [isOpen]);
 
   const fetchMessages = async () => {
     setLoading(true);
     try {
       const msgs = await getMessages(applicationId);
-      setMessages(msgs);
+      setMessages(Array.isArray(msgs) ? msgs : []);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchMessages();
-    // Remove polling interval: only fetch on mount/open
-    // const interval = setInterval(fetchMessages, 4000); // Poll every 4s
-    // return () => clearInterval(interval);
-  }, [applicationId]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!newMessage.trim()) return;
     setSending(true);
+    setError('');
     try {
-      await sendMessage(applicationId, input);
-      setInput("");
+      await sendMessage({
+        receiverEmail,
+        receiverRole,
+        content: newMessage,
+        applicationId,
+      });
+      setNewMessage('');
       fetchMessages();
+      if (inputRef.current) inputRef.current.focus();
+    } catch (err: any) {
+      setError('Failed to send message');
     } finally {
       setSending(false);
     }
   };
 
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 flex flex-col" style={{ minHeight: 500, maxHeight: 700 }}>
+        <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold">Chat</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <XCircle className="w-6 h-6" />
-          </button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none px-3 py-1 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-400">&times;</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+        <div className="flex-1 overflow-y-auto mb-2" style={{ minHeight: 350, maxHeight: 500 }}>
           {loading ? (
-            <div className="text-center text-gray-400">Loading messages...</div>
-          ) : messages.length === 0 ? (
-            <div className="text-center text-gray-400">No messages yet.</div>
+            <div>Loading...</div>
           ) : (
-            messages.map((msg, idx) => (
-              <div key={msg.id || idx} className={`flex flex-col ${msg.senderRole === "RECRUITER" ? "items-end" : "items-start"}`}>
-                <div className={`px-4 py-2 rounded-lg max-w-xs ${msg.senderRole === "RECRUITER" ? "bg-blue-100 text-blue-900" : "bg-gray-200 text-gray-900"}`}>
-                  {msg.content}
+            messages.length === 0 ? (
+              <div className="text-gray-400 text-center">No messages yet.</div>
+            ) : (
+              messages.map(msg => (
+                <div key={msg.id} className={`mb-2 flex ${msg.senderEmail === currentUserEmail ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`rounded px-3 py-2 ${msg.senderEmail === currentUserEmail ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}>
+                    <div className="text-xs opacity-70 mb-1">{msg.senderEmail}</div>
+                    <div>{msg.content}</div>
+                    <div className="text-xs opacity-50 mt-1 text-right">{new Date(msg.sentAt).toLocaleString()}</div>
+                  </div>
                 </div>
-                <span className="text-xs text-gray-400 mt-1">{new Date(msg.timestamp).toLocaleString()}</span>
-              </div>
-            ))
+              ))
+            )
           )}
           <div ref={messagesEndRef} />
         </div>
-        <div className="p-4 border-t flex gap-2">
+        {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+        <div className="flex gap-2 mt-2">
           <input
+            ref={inputRef}
             type="text"
-            className="flex-1 border rounded px-3 py-2 focus:outline-none focus:ring"
+            className="flex-1 border rounded px-2 py-2 text-base"
+            value={newMessage}
+            onChange={e => setNewMessage(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
             placeholder="Type a message..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
             disabled={sending}
           />
           <button
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-1 disabled:opacity-50"
             onClick={handleSend}
-            disabled={sending || !input.trim()}
+            className="bg-blue-500 text-white px-6 py-2 rounded text-base disabled:opacity-50"
+            disabled={sending || !newMessage.trim()}
           >
-            <Send className="w-4 h-4" />
-            Send
+            {sending ? 'Sending...' : 'Send'}
           </button>
         </div>
       </div>
     </div>
   );
-} 
+};
+
+export default MessageModal; 
