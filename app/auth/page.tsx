@@ -56,6 +56,8 @@ export default function AuthPage() {
 
         // Store the token in localStorage for Authorization header
         localStorage.setItem('token', response.token);
+        // Also set the token as a cookie for middleware access
+        document.cookie = `token=${response.token}; path=/;`;
 
         // Redirect based on role
         if (activeTab === 'student') {

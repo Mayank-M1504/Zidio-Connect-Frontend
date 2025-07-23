@@ -131,6 +131,9 @@ function areDocumentsVerified(uploadedDocuments: any) {
 }
 
 export default function StudentDashboard() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState('');
   console.log("StudentDashboard (app/student/dashboard/page.tsx) component loaded");
   const [activeTab, setActiveTab] = useState("jobs")
   const [searchTerm, setSearchTerm] = useState("")
@@ -383,6 +386,7 @@ export default function StudentDashboard() {
 
   const handleLogout = () => {
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    localStorage.removeItem('token');
     window.location.href = '/';
   };
 
@@ -435,9 +439,7 @@ export default function StudentDashboard() {
   };
 
   // Move these to the top, before any code that uses jobs
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(false);
-  const [jobsError, setJobsError] = useState('');
+
 
   useEffect(() => {
     if (activeTab === 'jobs') {
@@ -1373,18 +1375,7 @@ export default function StudentDashboard() {
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
-                    <div className="relative">
-                      <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <select
-                        value={filterType}
-                        onChange={(e) => setFilterType(e.target.value)}
-                        className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="all">All Types</option>
-                        <option value="internship">Internships</option>
-                        <option value="full-time">Full-time</option>
-                      </select>
-                    </div>
+                    
                     <button
                       type="button"
                       className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-gray-50 hover:bg-gray-100 font-medium flex items-center gap-2"
@@ -1395,20 +1386,20 @@ export default function StudentDashboard() {
                     </button>
                   </div>
                   {showFilters && (
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 relative">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                        <select
+                      <select
                           value={filterDepartment}
                           onChange={(e) => setFilterDepartment(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        >
+                      >
                           <option value="">All</option>
                           {departmentOptions.map((dept) => (
                             <option key={dept} value={dept}>{dept}</option>
                           ))}
-                        </select>
-                      </div>
+                      </select>
+                    </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                         <select
@@ -1421,7 +1412,7 @@ export default function StudentDashboard() {
                             <option key={loc} value={loc}>{loc}</option>
                           ))}
                         </select>
-                      </div>
+                  </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
                         <select
@@ -1434,7 +1425,7 @@ export default function StudentDashboard() {
                             <option key={dur} value={dur}>{dur}</option>
                           ))}
                         </select>
-                      </div>
+                </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Stipend Min</label>
                         <input
@@ -1469,6 +1460,20 @@ export default function StudentDashboard() {
                           <option value="Highest Stipend">Highest Stipend</option>
                         </select>
                       </div>
+                      <button
+                        type="button"
+                        className="absolute right-0 bottom-0 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition"
+                        onClick={() => {
+                          setFilterDepartment('');
+                          setFilterLocation('');
+                          setFilterDuration('');
+                          setFilterStipendMin('');
+                          setFilterStipendMax('');
+                          setSortBy('Newest');
+                        }}
+                      >
+                        Clear Filters
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1480,100 +1485,100 @@ export default function StudentDashboard() {
                     <div className="text-center text-red-500">{jobsError}</div>
                   ) : (
                     filteredAndSortedJobs.map((job) => (
-                      <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <div className="flex items-center mb-2">
-                              {job.companyLogo ? (
-                                <img src={job.companyLogo} alt="Company Logo" className="inline-block w-10 h-10 object-contain rounded mr-4 align-middle" />
-                              ) : (
-                                <div className="inline-block w-10 h-10 bg-gray-200 rounded mr-4 align-middle" />
-                              )}
-                              <div>
-                                <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
+                        <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <div className="flex items-center mb-2">
+                                {job.companyLogo ? (
+                                  <img src={job.companyLogo} alt="Company Logo" className="inline-block w-10 h-10 object-contain rounded mr-4 align-middle" />
+                                ) : (
+                                  <div className="inline-block w-10 h-10 bg-gray-200 rounded mr-4 align-middle" />
+                                )}
+                                <div>
+                                  <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
                                 <div className="text-gray-600 text-sm">{job.companyName || ''}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                <div className="flex items-center space-x-1">
+                                  <Building className="w-4 h-4" />
+                                  <span>{job.department}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <MapPin className="w-4 h-4" />
+                                  <span>{job.location}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <Clock className="w-4 h-4" />
+                                  <span>{job.duration}</span>
+                                </div>
                               </div>
                             </div>
-                            <div className="flex items-center space-x-4 text-sm text-gray-600">
-                              <div className="flex items-center space-x-1">
-                                <Building className="w-4 h-4" />
-                                <span>{job.department}</span>
+                            <div className="text-right">
+                              <div className="flex items-center space-x-1 text-green-600 font-semibold">
+                                <DollarSign className="w-4 h-4" />
+                                <span>{job.stipendSalary}</span>
                               </div>
-                              <div className="flex items-center space-x-1">
-                                <MapPin className="w-4 h-4" />
-                                <span>{job.location}</span>
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                <Clock className="w-4 h-4" />
-                                <span>{job.duration}</span>
-                              </div>
+                              <span
+                                className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                                  job.jobType === "Internship" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                                }`}
+                              >
+                                {job.jobType}
+                  </span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="flex items-center space-x-1 text-green-600 font-semibold">
-                              <DollarSign className="w-4 h-4" />
-                              <span>{job.stipendSalary}</span>
-                            </div>
-                            <span
-                              className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                                job.jobType === "Internship" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
-                              }`}
-                            >
-                              {job.jobType}
-                </span>
-                          </div>
-                        </div>
 
-                        <div className="flex justify-between items-center">
-                          {/* <span className="text-sm text-gray-500">Posted {job.posted}</span> */}
-                          <div
-                            className="relative group"
-                            style={{ display: 'inline-block' }}
-                            onMouseEnter={() => setApplyTooltipJobId(job.id)}
-                            onMouseLeave={() => setApplyTooltipJobId(null)}
-                          >
-                            {(() => {
-                              // Check if already applied
-                              const alreadyApplied = myApplications.some(
-                                (app) => app.jobId === job.id || app.job?.id === job.id
-                              );
-                              const disabled = alreadyApplied || !isProfileComplete(profile) || !areDocumentsVerified(uploadedDocuments);
-                              let tooltipMsg = '';
-                              if (alreadyApplied) {
-                                tooltipMsg = 'You have already applied to this job.';
-                              } else if (!isProfileComplete(profile) && !areDocumentsVerified(uploadedDocuments)) {
-                                tooltipMsg = 'Please complete your profile and upload all required, approved documents to apply.';
-                              } else if (!isProfileComplete(profile)) {
-                                tooltipMsg = 'Please complete your profile to apply.';
-                              } else if (!areDocumentsVerified(uploadedDocuments)) {
-                                tooltipMsg = 'All required documents must be uploaded and approved to apply.';
-                              }
-                              return (
-                                <>
-                                  <button
-                                    className={`bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    onClick={() => { if (!disabled) { setJobDetails(job); setShowJobDetailsModal(true); } }}
-                                    disabled={disabled}
-                                    tabIndex={0}
-                                    style={{ pointerEvents: !disabled ? 'auto' : 'none' }}
-                                  >
-                                    View
-                                  </button>
-                                  {applyTooltipJobId === job.id && tooltipMsg && (
-                                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 flex flex-col items-center" style={{ minWidth: 240 }}>
-                                      <div className="relative bg-yellow-100 text-yellow-900 text-xs rounded-xl px-3 py-2 shadow-lg border border-yellow-400 font-medium animate-fade-in" style={{ boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }}>
-                                        {tooltipMsg}
-                                        <span className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-yellow-100"></span>
+                          <div className="flex justify-between items-center">
+                            {/* <span className="text-sm text-gray-500">Posted {job.posted}</span> */}
+                            <div
+                              className="relative group"
+                              style={{ display: 'inline-block' }}
+                              onMouseEnter={() => setApplyTooltipJobId(job.id)}
+                              onMouseLeave={() => setApplyTooltipJobId(null)}
+                            >
+                              {(() => {
+                                // Check if already applied
+                                const alreadyApplied = myApplications.some(
+                                  (app) => app.jobId === job.id || app.job?.id === job.id
+                                );
+                                const disabled = alreadyApplied || !isProfileComplete(profile) || !areDocumentsVerified(uploadedDocuments);
+                                let tooltipMsg = '';
+                                if (alreadyApplied) {
+                                  tooltipMsg = 'You have already applied to this job.';
+                                } else if (!isProfileComplete(profile) && !areDocumentsVerified(uploadedDocuments)) {
+                                  tooltipMsg = 'Please complete your profile and upload all required, approved documents to apply.';
+                                } else if (!isProfileComplete(profile)) {
+                                  tooltipMsg = 'Please complete your profile to apply.';
+                                } else if (!areDocumentsVerified(uploadedDocuments)) {
+                                  tooltipMsg = 'All required documents must be uploaded and approved to apply.';
+                                }
+                                return (
+                                  <>
+                                    <button
+                                      className={`bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      onClick={() => { if (!disabled) { setJobDetails(job); setShowJobDetailsModal(true); } }}
+                                      disabled={disabled}
+                                      tabIndex={0}
+                                      style={{ pointerEvents: !disabled ? 'auto' : 'none' }}
+                                    >
+                                      View
+                                    </button>
+                                    {applyTooltipJobId === job.id && tooltipMsg && (
+                                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 flex flex-col items-center" style={{ minWidth: 240 }}>
+                                        <div className="relative bg-yellow-100 text-yellow-900 text-xs rounded-xl px-3 py-2 shadow-lg border border-yellow-400 font-medium animate-fade-in" style={{ boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }}>
+                                          {tooltipMsg}
+                                          <span className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-yellow-100"></span>
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      ))
                   )}
                 </div>
               </div>
@@ -1591,29 +1596,29 @@ export default function StudentDashboard() {
                   ) : myApplications.length === 0 ? (
                     <div className="text-center text-gray-500">You have not applied to any jobs yet.</div>
                   ) : myApplications.map((app) => (
-                    <div
-                      key={app.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">{app.jobTitle || app.job?.title}</h3>
-                          <p className="text-gray-600 mb-2">{app.company || app.job?.companyName}</p>
-                          <p className="text-sm text-gray-500">Applied on {app.appliedAt ? new Date(app.appliedAt).toLocaleDateString() : ''}</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.status === 'Shortlisted' ? 'bg-green-100 text-green-700' : app.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {app.status}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Optionally add a button to view more details */}
-                    </div>
-                  ))}
+                      <div
+                        key={app.id}
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{app.jobTitle || app.job?.title}</h3>
+                            <p className="text-gray-600 mb-2">{app.company || app.job?.companyName}</p>
+                            <p className="text-sm text-gray-500">Applied on {app.appliedAt ? new Date(app.appliedAt).toLocaleDateString() : ''}</p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${app.status === 'Shortlisted' ? 'bg-green-100 text-green-700' : app.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {app.status}
+                  </span>
                 </div>
               </div>
-            )}
+                        {/* Optionally add a button to view more details */}
+                      </div>
+                  ))}
           </div>
+        </div>
+            )}
+      </div>
         </div>
       </div>
       {/* Application Modal */}
