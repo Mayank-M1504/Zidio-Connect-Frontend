@@ -465,15 +465,12 @@ export default function RecruiterDashboard() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                <Bell className="w-5 h-5" />
-              </button>
               <button
                 onClick={handleLogout}
-                className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors"
+                className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-red-50"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Logout</span>
+                <span className="font-medium">Logout</span>
               </button>
             </div>
           </div>
@@ -1291,29 +1288,29 @@ export default function RecruiterDashboard() {
                   <div>
                     <span className="block text-xs text-gray-500 mb-0.5">Name</span>
                     <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.studentName || '-'}</span>
-                  </div>
+                </div>
                   <div>
                     <span className="block text-xs text-gray-500 mb-0.5">Email</span>
                     <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.studentEmail || '-'}</span>
-                  </div>
-                  {selectedApplicant.college && (
+                </div>
+                {selectedApplicant.college && (
                     <div>
                       <span className="block text-xs text-gray-500 mb-0.5">College</span>
                       <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.college}</span>
-                    </div>
-                  )}
-                  {selectedApplicant.course && (
+                  </div>
+                )}
+                {selectedApplicant.course && (
                     <div>
                       <span className="block text-xs text-gray-500 mb-0.5">Course</span>
                       <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.course}</span>
-                    </div>
-                  )}
-                  {selectedApplicant.yearOfStudy && (
+                  </div>
+                )}
+                {selectedApplicant.yearOfStudy && (
                     <div>
                       <span className="block text-xs text-gray-500 mb-0.5">Year</span>
                       <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.yearOfStudy}</span>
-                    </div>
-                  )}
+                  </div>
+                )}
                 </div>
               </div>
               {/* Documents Section */}
@@ -1323,77 +1320,77 @@ export default function RecruiterDashboard() {
                   <div>
                     <span className="block text-xs text-gray-500 mb-0.5">Resume</span>
                     <div className="flex items-center gap-3 bg-gray-50 rounded px-3 py-1.5">
-                      {selectedApplicant.resume?.url ? (
-                        <>
+                    {selectedApplicant.resume?.url ? (
+                      <>
                           <span className="font-bold text-base text-gray-900 min-w-[90px] text-left">{selectedApplicant.resume.name || 'Resume'}</span>
-                          <button type="button" title="View Resume" onClick={() => {
-                            const doc = selectedApplicant.resume;
-                            setSelectedDocument({
-                              ...doc,
-                              fileName: doc.name || 'Resume',
-                              contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
-                            });
-                            setShowDocumentModal(true);
+                        <button type="button" title="View Resume" onClick={() => {
+                          const doc = selectedApplicant.resume;
+                          setSelectedDocument({
+                            ...doc,
+                            fileName: doc.name || 'Resume',
+                            contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
+                          });
+                          setShowDocumentModal(true);
                           }} className="text-blue-600 hover:text-blue-800 ml-2">
                             <Eye className="w-4 h-4 align-middle" />
-                          </button>
-                        </>
-                      ) : (
+                        </button>
+                      </>
+                    ) : (
                         <span className="text-gray-400">Not submitted</span>
-                      )}
-                    </div>
+                    )}
                   </div>
+                </div>
                   <div>
                     <span className="block text-xs text-gray-500 mb-0.5">Marksheet</span>
                     <div className="flex items-center gap-3 bg-gray-50 rounded px-3 py-1.5">
-                      {selectedApplicant.marksheet?.url ? (
-                        <>
+                    {selectedApplicant.marksheet?.url ? (
+                      <>
                           <span className="font-bold text-base text-gray-900 min-w-[90px] text-left">{selectedApplicant.marksheet.name || 'Marksheet'}</span>
-                          <button type="button" title="View Marksheet" onClick={() => {
-                            const doc = selectedApplicant.marksheet;
-                            setSelectedDocument({
-                              ...doc,
-                              fileName: doc.name || 'Marksheet',
-                              contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
-                            });
-                            setShowDocumentModal(true);
+                        <button type="button" title="View Marksheet" onClick={() => {
+                          const doc = selectedApplicant.marksheet;
+                          setSelectedDocument({
+                            ...doc,
+                            fileName: doc.name || 'Marksheet',
+                            contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
+                          });
+                          setShowDocumentModal(true);
                           }} className="text-blue-600 hover:text-blue-800 ml-2">
                             <Eye className="w-4 h-4 align-middle" />
-                          </button>
-                        </>
-                      ) : (
+                        </button>
+                      </>
+                    ) : (
                         <span className="text-gray-400">Not submitted</span>
-                      )}
-                    </div>
+                    )}
                   </div>
+                </div>
                   <div>
                     <span className="block text-xs text-gray-500 mb-0.5">Certificates</span>
                     <div className="bg-gray-50 rounded px-3 py-1.5">
-                      {Array.isArray(selectedApplicant.certificates) && selectedApplicant.certificates.length > 0 ? (
+                    {Array.isArray(selectedApplicant.certificates) && selectedApplicant.certificates.length > 0 ? (
                         <ul className="space-y-1">
-                          {selectedApplicant.certificates.map((cert: any, idx: number) => (
+                        {selectedApplicant.certificates.map((cert: any, idx: number) => (
                             <li key={cert.id} className="flex items-center gap-3">
                               <span className="font-bold text-base text-gray-900 text-left">{cert.name || 'Certificate'}</span>
-                              <button type="button" title="View Certificate" onClick={() => {
-                                setSelectedDocument({
-                                  ...cert,
-                                  fileName: cert.name || 'Certificate',
-                                  contentType: cert.contentType || inferContentTypeFromUrl(cert.url),
-                                });
-                                setShowDocumentModal(true);
+                            <button type="button" title="View Certificate" onClick={() => {
+                              setSelectedDocument({
+                                ...cert,
+                                fileName: cert.name || 'Certificate',
+                                contentType: cert.contentType || inferContentTypeFromUrl(cert.url),
+                              });
+                              setShowDocumentModal(true);
                               }} className="text-blue-600 hover:text-blue-800 ml-2">
                                 <Eye className="w-4 h-4 align-middle" />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
                         <span className="text-gray-400">None</span>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
+            </div>
             </div>
             {/* Q&A Section */}
             {(selectedApplicant?.questionForApplicant || selectedApplicant?.answerForRecruiter) && (

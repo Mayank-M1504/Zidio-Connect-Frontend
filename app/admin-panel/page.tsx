@@ -1,6 +1,7 @@
-"use client"
+ "use client"
 
-import { useState } from "react"
+import { Dialog, DialogContent, DialogTitle, DialogClose } from "../../components/ui/dialog";
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   Users,
@@ -27,214 +28,233 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  X,
 } from "lucide-react"
+
+// Admin API models
+export interface AdminDocument {
+  id: number;
+  name: string;
+  url: string;
+  type: string; // e.g., resume, marksheet, GST, PAN, etc.
+}
+
+export interface AdminCertificate {
+  id: number;
+  name: string;
+  url: string;
+}
+
+export interface AdminStudentProfile {
+  id: number;
+  name: string;
+  email: string;
+  college: string;
+  course: string;
+  yearOfStudy: string;
+  documents: AdminDocument[];
+  certificates: AdminCertificate[];
+  phone?: string;
+  gpa?: string;
+  academicAchievements?: string;
+  linkedinProfile?: string;
+  githubProfile?: string;
+  portfolioWebsite?: string;
+  dateOfBirth?: string;
+  address?: string;
+  bio?: string;
+  careerGoals?: string;
+  skills?: string[];
+  interests?: string[];
+  preferredJobRoles?: string[];
+  preferredLocations?: string[];
+}
+
+export interface AdminRecruiterProfile {
+  id: number;
+  name: string;
+  email: string;
+  company: string;
+  companyLogo: string | null;
+  documents: AdminDocument[];
+  phone?: string;
+  companyWebsite?: string;
+  companyAddress?: string;
+  companyDescription?: string;
+  recruiterRole?: string;
+  linkedinProfile?: string;
+  stinNumber?: string;
+}
+
+// Use AdminStudentProfile and AdminRecruiterProfile for user management
+
+// Type guard for AdminStudentProfile
+function isAdminStudentProfile(user: AdminStudentProfile | AdminRecruiterProfile): user is AdminStudentProfile {
+  return (user as AdminStudentProfile).college !== undefined;
+}
+// Type guard for AdminRecruiterProfile
+function isAdminRecruiterProfile(user: AdminStudentProfile | AdminRecruiterProfile): user is AdminRecruiterProfile {
+  return (user as AdminRecruiterProfile).company !== undefined;
+}
+
+// Helper for pie chart SVG
+function PieChart({ data = [], colors, size = 120 }: { data?: number[]; colors: string[]; size?: number }) {
+  if (!Array.isArray(data) || data.length === 0 || data.every(v => v === 0)) {
+    return (
+      <div style={{ width: size, height: size }} className="flex items-center justify-center mx-auto">
+        <span className="text-gray-400 text-sm">No data</span>
+      </div>
+    );
+  }
+  const total = data.reduce((a, b) => a + b, 0);
+  let cumulative = 0;
+  const radius = size / 2 - 8;
+  const cx = size / 2;
+  const cy = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-auto">
+      {data.map((value, i) => {
+        const startAngle = (cumulative / total) * 2 * Math.PI;
+        const endAngle = ((cumulative + value) / total) * 2 * Math.PI;
+        const x1 = cx + radius * Math.sin(startAngle);
+        const y1 = cy - radius * Math.cos(startAngle);
+        const x2 = cx + radius * Math.sin(endAngle);
+        const y2 = cy - radius * Math.cos(endAngle);
+        const largeArc = value / total > 0.5 ? 1 : 0;
+        const pathData = `M${cx},${cy} L${x1},${y1} A${radius},${radius} 0 ${largeArc} 1 ${x2},${y2} Z`;
+        cumulative += value;
+        return <path key={i} d={pathData} fill={colors[i]} />;
+      })}
+    </svg>
+  );
+}
+// Helper for bar chart SVG
+function BarChart({ data, labels, colors, width = 180, height = 80 }: { data: number[]; labels: string[]; colors: string[]; width?: number; height?: number }) {
+  const max = Math.max(...data, 1);
+  const barWidth = width / data.length - 10;
+  return (
+    <svg width={width} height={height + 20} className="mx-auto">
+      {data.map((value, i) => (
+        <g key={i}>
+          <rect
+            x={i * (barWidth + 10) + 10}
+            y={height - (value / max) * height + 10}
+            width={barWidth}
+            height={(value / max) * height}
+            fill={colors[i]}
+            rx={4}
+          />
+          <text x={i * (barWidth + 10) + 10 + barWidth / 2} y={height + 18} textAnchor="middle" fontSize="12" fill="#555">{labels[i]}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
 
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState("overview")
   const [userType, setUserType] = useState("all") // "all", "student", "recruiter"
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
+  // Remove filterStatus state
   const router = useRouter()
 
-  // Dummy data
-  const adminProfile = {
-    name: "Admin User",
-    email: "admin@zidio.in",
-  }
+  // Add a new state for the search input
+  const [searchInput, setSearchInput] = useState("");
 
-  const stats = {
-    totalUsers: 1250,
-    totalStudents: 950,
-    totalRecruiters: 300,
-    totalJobs: 89,
-    activeRecruiters: 45,
-    pendingApprovals: 12,
-  }
+  // API state
+  const [students, setStudents] = useState<AdminStudentProfile[]>([]);
+  const [recruiters, setRecruiters] = useState<AdminRecruiterProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const students = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      role: "Student",
-      college: "MIT",
-      course: "Computer Science",
-      year: "3rd Year",
-      joinDate: "2024-01-15",
-      status: "Active",
-      lastLogin: "2024-01-20",
-      phone: "+91 9876543210",
-      applications: 5,
-      profileComplete: 85,
-    },
-    {
-      id: 2,
-      name: "Alice Cooper",
-      email: "alice@example.com",
-      role: "Student",
-      college: "Stanford University",
-      course: "Data Science",
-      year: "2nd Year",
-      joinDate: "2024-01-12",
-      status: "Active",
-      lastLogin: "2024-01-19",
-      phone: "+91 9876543211",
-      applications: 3,
-      profileComplete: 92,
-    },
-    {
-      id: 3,
-      name: "Mike Wilson",
-      email: "mike@example.com",
-      role: "Student",
-      college: "UC Berkeley",
-      course: "Mechanical Engineering",
-      year: "4th Year",
-      joinDate: "2024-01-08",
-      status: "Blocked",
-      lastLogin: "2024-01-18",
-      phone: "+91 9876543212",
-      applications: 8,
-      profileComplete: 78,
-    },
-    {
-      id: 4,
-      name: "Sarah Johnson",
-      email: "sarah.student@example.com",
-      role: "Student",
-      college: "Harvard University",
-      course: "Business Administration",
-      year: "1st Year",
-      joinDate: "2024-01-20",
-      status: "Pending",
-      lastLogin: "2024-01-21",
-      phone: "+91 9876543213",
-      applications: 1,
-      profileComplete: 45,
-    },
-  ]
+  // Modal state
+  const [selectedUser, setSelectedUser] = useState<AdminStudentProfile | AdminRecruiterProfile | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedDocumentToView, setSelectedDocumentToView] = useState<any | null>(null);
+  const [docActionLoading, setDocActionLoading] = useState(false);
 
-  const recruiters = [
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      email: "sarah@techcorp.com",
-      role: "Recruiter",
-      company: "TechCorp Solutions",
-      position: "HR Manager",
-      joinDate: "2024-01-10",
-      status: "Active",
-      lastLogin: "2024-01-19",
-      phone: "+91 9876543220",
-      jobsPosted: 12,
-      applicantsHired: 8,
-      companySize: "500-1000",
-      verified: true,
-    },
-    {
-      id: 2,
-      name: "Emily Brown",
-      email: "emily@designstudio.com",
-      role: "Recruiter",
-      company: "Creative Design Studio",
-      position: "Talent Acquisition Lead",
-      joinDate: "2024-01-08",
-      status: "Active",
-      lastLogin: "2024-01-20",
-      phone: "+91 9876543221",
-      jobsPosted: 8,
-      applicantsHired: 5,
-      companySize: "50-100",
-      verified: true,
-    },
-    {
-      id: 3,
-      name: "Robert Chen",
-      email: "robert@startup.com",
-      role: "Recruiter",
-      company: "InnovateTech Startup",
-      position: "Founder & CEO",
-      joinDate: "2024-01-05",
-      status: "Pending",
-      lastLogin: "2024-01-18",
-      phone: "+91 9876543222",
-      jobsPosted: 3,
-      applicantsHired: 0,
-      companySize: "10-50",
-      verified: false,
-    },
-    {
-      id: 4,
-      name: "Lisa Wang",
-      email: "lisa@enterprise.com",
-      role: "Recruiter",
-      company: "Enterprise Solutions Inc",
-      position: "Senior Recruiter",
-      joinDate: "2024-01-14",
-      status: "Blocked",
-      lastLogin: "2024-01-17",
-      phone: "+91 9876543223",
-      jobsPosted: 15,
-      applicantsHired: 12,
-      companySize: "1000+",
-      verified: true,
-    },
-  ]
+  // Add jobs state
+  const [jobs, setJobs] = useState([]);
+  // Add a new state for the active job management tab
+  const [jobActionLoading, setJobActionLoading] = useState<number | null>(null);
 
-  const recentActivities = [
-    {
-      id: 1,
-      action: "New student registration",
-      user: "Alice Cooper",
-      timestamp: "2 hours ago",
-      type: "user",
-    },
-    {
-      id: 2,
-      action: "Job posted",
-      user: "TechCorp Solutions",
-      timestamp: "4 hours ago",
-      type: "job",
-    },
-    {
-      id: 3,
-      action: "Recruiter approved",
-      user: "Creative Design Studio",
-      timestamp: "6 hours ago",
-      type: "approval",
-    },
-    {
-      id: 4,
-      action: "Application submitted",
-      user: "John Doe",
-      timestamp: "8 hours ago",
-      type: "application",
-    },
-  ]
+  // Add a helper to fetch jobs (for reuse after approve/reject)
+  const fetchJobs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:8080/api/jobs?all=true', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      setJobs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setJobs([]);
+    }
+  };
+
+  // Fetch admin profiles from backend
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Not authenticated. Please log in.');
+          setLoading(false);
+          return;
+        }
+        const res = await fetch('http://localhost:8080/api/admin/profiles', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch profiles: ${res.status}`);
+        }
+        const data = await res.json();
+        setStudents(Array.isArray(data.students) ? data.students : []);
+        setRecruiters(Array.isArray(data.recruiters) ? data.recruiters : []);
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch profiles');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfiles();
+  }, []);
+
+  // In useEffect, call fetchJobs
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  // Empty placeholders for admin data
+  const adminProfile = null;
+  const stats = null;
+  // Use AdminStudentProfile and AdminRecruiterProfile for user management
+  const recentActivities: any[] = [];
 
   // Filter users based on type and search
   const getFilteredUsers = () => {
-    let users = []
-
+    let users: (AdminStudentProfile | AdminRecruiterProfile)[] = [];
     if (userType === "student") {
-      users = students
+      users = students;
     } else if (userType === "recruiter") {
-      users = recruiters
+      users = recruiters;
     } else {
-      users = [...students, ...recruiters]
+      users = [...students, ...recruiters];
     }
-
     return users.filter((user) => {
-      const matchesSearch =
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch =
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (user.company && user.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (user.college && user.college.toLowerCase().includes(searchTerm.toLowerCase()))
-
-      const matchesFilter = filterStatus === "all" || user.status.toLowerCase() === filterStatus
-      return matchesSearch && matchesFilter
-    })
-  }
+        (isAdminRecruiterProfile(user) && user.company && user.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (isAdminStudentProfile(user) && user.college && user.college.toLowerCase().includes(searchTerm.toLowerCase()));
+      // No status field in new DTOs, so skip filterStatus
+      return matchesSearch;
+    });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -280,6 +300,67 @@ export default function AdminPanel() {
     router.push('/');
   };
 
+  // Placeholder handlers for toggling status
+  async function handleApproveDocument(doc: any) {
+    setDocActionLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const isCertificate = !!doc.certificateName || (!doc.type && doc.name);
+      const url = isCertificate
+        ? `http://localhost:8080/api/documents/admin/certificate-status/${doc.id}?status=APPROVED`
+        : `http://localhost:8080/api/documents/admin/document-status/${doc.id}?status=APPROVED`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to approve');
+      updateDocumentStatusInState(doc, 'APPROVED');
+      setSelectedDocumentToView({ ...doc, status: 'APPROVED' });
+    } catch (err) {
+      alert('Failed to approve: ' + (err as any).message);
+    } finally {
+      setDocActionLoading(false);
+    }
+  }
+
+  async function handleRejectDocument(doc: any) {
+    setDocActionLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const isCertificate = !!doc.certificateName || (!doc.type && doc.name);
+      const url = isCertificate
+        ? `http://localhost:8080/api/documents/admin/certificate-status/${doc.id}?status=REJECTED`
+        : `http://localhost:8080/api/documents/admin/document-status/${doc.id}?status=REJECTED`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to reject');
+      updateDocumentStatusInState(doc, 'REJECTED');
+      setSelectedDocumentToView({ ...doc, status: 'REJECTED' });
+    } catch (err) {
+      alert('Failed to reject: ' + (err as any).message);
+    } finally {
+      setDocActionLoading(false);
+    }
+  }
+
+  function updateDocumentStatusInState(doc: any, status: string) {
+    setStudents(prev => prev.map(s => ({
+      ...s,
+      documents: s.documents.map(d => d.id === doc.id ? { ...d, status } : d),
+      certificates: s.certificates ? s.certificates.map(c => c.id === doc.id ? { ...c, status } : c) : s.certificates,
+    })));
+    setRecruiters(prev => prev.map(r => ({
+      ...r,
+      documents: r.documents.map(d => d.id === doc.id ? { ...d, status } : d),
+    })));
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -292,17 +373,11 @@ export default function AdminPanel() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
-                <p className="text-sm text-gray-500">Welcome back, {adminProfile.name}</p>
+                <p className="text-sm text-gray-500">Welcome back, Admin</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 rounded-lg hover:bg-gray-100">
-                <Bell className="w-5 h-5" />
-              </button>
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 rounded-lg hover:bg-gray-100">
-                <Settings className="w-5 h-5" />
-              </button>
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-red-50"
@@ -351,8 +426,19 @@ export default function AdminPanel() {
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
-                  <PieChart className="w-4 h-4" />
+                  <BarChart3 className="w-4 h-4" />
                   <span>Analytics</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("jobs")}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 font-medium ${
+                    activeTab === "jobs"
+                      ? "bg-blue-50 text-blue-600 border border-blue-200"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  <Briefcase className="w-4 h-4" />
+                  <span>Job Management</span>
                 </button>
               </nav>
             </div>
@@ -369,7 +455,7 @@ export default function AdminPanel() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Total Users</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalUsers}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{students.length + recruiters.length}</p>
                         <p className="text-xs text-green-600 mt-1">↗️ +12% from last month</p>
                       </div>
                       <div className="p-3 bg-blue-50 rounded-lg">
@@ -382,7 +468,7 @@ export default function AdminPanel() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Students</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalStudents}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{students.length}</p>
                         <p className="text-xs text-blue-600 mt-1">📚 Active learners</p>
                       </div>
                       <div className="p-3 bg-blue-50 rounded-lg">
@@ -395,7 +481,7 @@ export default function AdminPanel() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Recruiters</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalRecruiters}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{recruiters.length}</p>
                         <p className="text-xs text-purple-600 mt-1">🏢 Companies hiring</p>
                       </div>
                       <div className="p-3 bg-purple-50 rounded-lg">
@@ -408,46 +494,13 @@ export default function AdminPanel() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Total Jobs</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalJobs}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{jobs.length}</p>
                         <p className="text-xs text-green-600 mt-1">💼 Opportunities</p>
                       </div>
                       <div className="p-3 bg-green-50 rounded-lg">
                         <Briefcase className="w-6 h-6 text-green-600" />
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* Recent Activities */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-6 pb-3 border-b border-gray-200">
-                    Recent Activities
-                  </h3>
-                  <div className="space-y-4">
-                    {recentActivities.map((activity) => (
-                      <div
-                        key={activity.id}
-                        className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg border border-gray-100"
-                      >
-                        <div
-                          className={`w-3 h-3 rounded-full ${
-                            activity.type === "user"
-                              ? "bg-blue-500"
-                              : activity.type === "job"
-                                ? "bg-green-500"
-                                : activity.type === "approval"
-                                  ? "bg-purple-500"
-                                  : "bg-orange-500"
-                          }`}
-                        />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                          <p className="text-xs text-gray-500">
-                            {activity.user} • {activity.timestamp}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               </div>
@@ -500,158 +553,223 @@ export default function AdminPanel() {
                       </button>
                     </div>
 
-                    {/* Search and Filter */}
+                {/* Search and Filter */}
                     <div className="flex flex-1 gap-4">
-                      <div className="flex-1 relative">
+                    <div className="flex-1 relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                        <input
-                          type="text"
-                          placeholder="Search users..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            setSearchTerm(searchInput);
+                          }
+                        }}
                           className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                        />
-                      </div>
-                      <div className="relative">
-                        <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                        <select
-                          value={filterStatus}
-                          onChange={(e) => setFilterStatus(e.target.value)}
-                          className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 min-w-[150px]"
-                        >
-                          <option value="all">All Status</option>
-                          <option value="active">Active</option>
-                          <option value="pending">Pending</option>
-                          <option value="blocked">Blocked</option>
-                        </select>
-                      </div>
+                      />
                     </div>
                   </div>
                 </div>
+                              </div>
 
                 {/* Users List */}
                 <div className="space-y-4">
-                  {getFilteredUsers().map((user) => (
+                  {loading && <div>Loading users...</div>}
+                  {error && <div className="text-red-600">{error}</div>}
+                  {!loading && !error && getFilteredUsers().map((user) => (
                     <div
                       key={user.id}
-                      className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-300 border border-gray-100"
+                      className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow duration-300 border border-gray-100 cursor-pointer"
+                      onClick={() => { setSelectedUser(user); setShowModal(true); }}
                     >
-                      <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900 mb-1">{user.name}</h3>
-                              <div className="flex items-center space-x-3 mb-2">
-                                <span
-                                  className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${getRoleColor(user.role)}`}
-                                >
-                                  {user.role}
-                                </span>
-                                <span
-                                  className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(user.status)}`}
-                                >
-                                  {getStatusIcon(user.status)}
-                                  <span className="ml-1">{user.status}</span>
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Mail className="w-4 h-4 mr-2" />
-                                <span>{user.email}</span>
-                              </div>
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Phone className="w-4 h-4 mr-2" />
-                                <span>{user.phone}</span>
-                              </div>
-                              {user.role === "Student" ? (
-                                <>
-                                  <div className="flex items-center text-sm text-gray-600">
-                                    <GraduationCap className="w-4 h-4 mr-2" />
-                                    <span>{user.college}</span>
-                                  </div>
-                                  <div className="flex items-center text-sm text-gray-600">
-                                    <span className="font-medium">
-                                      {user.course} - {user.year}
-                                    </span>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="flex items-center text-sm text-gray-600">
-                                    <Building2 className="w-4 h-4 mr-2" />
-                                    <span>{user.company}</span>
-                                  </div>
-                                  <div className="flex items-center text-sm text-gray-600">
-                                    <User className="w-4 h-4 mr-2" />
-                                    <span>{user.position}</span>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-
-                            <div className="space-y-2">
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Calendar className="w-4 h-4 mr-2" />
-                                <span>Joined: {user.joinDate}</span>
-                              </div>
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Activity className="w-4 h-4 mr-2" />
-                                <span>Last login: {user.lastLogin}</span>
-                              </div>
-                              {user.role === "Student" ? (
-                                <>
-                                  <div className="text-sm text-gray-600">
-                                    <span className="font-medium">Applications: </span>
-                                    <span className="text-blue-600">{user.applications}</span>
-                                  </div>
-                                  <div className="text-sm text-gray-600">
-                                    <span className="font-medium">Profile: </span>
-                                    <span className="text-green-600">{user.profileComplete}% complete</span>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="text-sm text-gray-600">
-                                    <span className="font-medium">Jobs posted: </span>
-                                    <span className="text-purple-600">{user.jobsPosted}</span>
-                                  </div>
-                                  <div className="text-sm text-gray-600">
-                                    <span className="font-medium">Hired: </span>
-                                    <span className="text-green-600">{user.applicantsHired}</span>
-                                  </div>
-                                  {user.verified && (
-                                    <div className="flex items-center text-sm text-green-600">
-                                      <Shield className="w-4 h-4 mr-1" />
-                                      <span>Verified Company</span>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                        <div className="flex items-center gap-3 font-semibold text-gray-900">
+                          {user.name}
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${isAdminStudentProfile(user) ? 'text-blue-600 bg-blue-100 border-blue-200' : 'text-purple-600 bg-purple-100 border-purple-200'}`}>
+                            {isAdminStudentProfile(user) ? 'Student' : 'Recruiter'}
+                              </span>
                         </div>
-
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <button className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors duration-200">
-                            <Eye className="w-4 h-4" />
-                            <span className="text-sm font-medium">View</span>
-                          </button>
-                          <button className="flex items-center space-x-1 text-green-600 hover:text-green-700 px-3 py-2 rounded-lg hover:bg-green-50 transition-colors duration-200">
-                            <UserCheck className="w-4 h-4" />
-                            <span className="text-sm font-medium">Approve</span>
-                          </button>
-                          <button className="flex items-center space-x-1 text-red-600 hover:text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors duration-200">
-                            <UserX className="w-4 h-4" />
-                            <span className="text-sm font-medium">Block</span>
-                          </button>
-                        </div>
+                        <div className="text-gray-600 text-sm">{user.email}</div>
                       </div>
                     </div>
                   ))}
+                  {/* Modal for user details */}
+                  {showModal && selectedUser && (
+                    <Dialog open={showModal} onOpenChange={setShowModal}>
+                      <DialogContent className="max-w-4xl w-full max-h-[90vh] overflow-y-auto p-0">
+                        <div className="flex flex-col md:flex-row gap-8 p-4">
+                          {/* Left column: Profile sections */}
+                          <div className="flex-1 min-w-[260px] space-y-6 border-r border-gray-200 pr-6">
+                            {isAdminStudentProfile(selectedUser) ? (
+                              <div className="space-y-6">
+                                {/* Profile Section */}
+                                <div>
+                                  <div className="text-xl font-bold mb-2">Profile</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div><span className="font-medium">Full Name:</span> {selectedUser.name}</div>
+                                    <div><span className="font-medium">Email:</span> {selectedUser.email}</div>
+                                    {selectedUser.phone && <div><span className="font-medium">Phone:</span> {selectedUser.phone}</div>}
+                                    <div><span className="font-medium">College:</span> {selectedUser.college}</div>
+                                  </div>
+                                </div>
+                                <hr className="my-2 border-gray-200" />
+                                {/* Academics Section */}
+                                <div>
+                                  <div className="text-lg font-semibold mb-2">Academics</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div><span className="font-medium">Course:</span> {selectedUser.course}</div>
+                                    <div><span className="font-medium">Year of Study:</span> {selectedUser.yearOfStudy}</div>
+                                    {selectedUser.gpa && <div><span className="font-medium">GPA:</span> {selectedUser.gpa}</div>}
+                                    {selectedUser.academicAchievements && <div><span className="font-medium">Achievements:</span> {selectedUser.academicAchievements}</div>}
+                                  </div>
+                                </div>
+                                <hr className="my-2 border-gray-200" />
+                                {/* Professional Section */}
+                                <div>
+                                  <div className="text-lg font-semibold mb-2">Professional</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedUser.linkedinProfile && <span><span className="font-medium">LinkedIn:</span> <a href={selectedUser.linkedinProfile} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{selectedUser.linkedinProfile}</a></span>}
+                                      {selectedUser.githubProfile && <span><span className="font-medium">GitHub:</span> <a href={selectedUser.githubProfile} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{selectedUser.githubProfile}</a></span>}
+                                    </div>
+                                    {selectedUser.portfolioWebsite && <div><span className="font-medium">Portfolio:</span> <a href={selectedUser.portfolioWebsite} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{selectedUser.portfolioWebsite}</a></div>}
+                                    {selectedUser.skills && selectedUser.skills.length > 0 && <div><span className="font-medium">Skills:</span> {selectedUser.skills.join(', ')}</div>}
+                                  </div>
+                                </div>
+                                <hr className="my-2 border-gray-200" />
+                                {/* Personal Section */}
+                                <div>
+                                  <div className="text-lg font-semibold mb-2">Personal</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {selectedUser.dateOfBirth && <div><span className="font-medium">Date of Birth:</span> {selectedUser.dateOfBirth}</div>}
+                                    {selectedUser.address && <div><span className="font-medium">Address:</span> {selectedUser.address}</div>}
+                                    {selectedUser.bio && <div><span className="font-medium">Bio:</span> {selectedUser.bio}</div>}
+                                  </div>
+                                </div>
+                                <hr className="my-2 border-gray-200" />
+                                {/* Preferences Section */}
+                                <div>
+                                  <div className="text-lg font-semibold mb-2">Preferences</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {selectedUser.careerGoals && <div><span className="font-medium">Career Goals:</span> {selectedUser.careerGoals}</div>}
+                                    {selectedUser.interests && selectedUser.interests.length > 0 && <div><span className="font-medium">Interests:</span> {selectedUser.interests.join(', ')}</div>}
+                                    {selectedUser.preferredJobRoles && selectedUser.preferredJobRoles.length > 0 && <div><span className="font-medium">Preferred Job Roles:</span> {selectedUser.preferredJobRoles.join(', ')}</div>}
+                                    {selectedUser.preferredLocations && selectedUser.preferredLocations.length > 0 && <div><span className="font-medium">Preferred Locations:</span> {selectedUser.preferredLocations.join(', ')}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-6">
+                                {/* Profile Section */}
+                                <div>
+                                  <div className="text-xl font-bold mb-2">Profile</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div><span className="font-medium">Full Name:</span> {selectedUser.name}</div>
+                                    <div><span className="font-medium">Email:</span> {selectedUser.email}</div>
+                                    {selectedUser.phone && <div><span className="font-medium">Phone:</span> {selectedUser.phone}</div>}
+                                  </div>
+                                </div>
+                                <hr className="my-2 border-gray-200" />
+                                {/* Company Section */}
+                                <div>
+                                  <div className="text-lg font-semibold mb-2">Company</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div><span className="font-medium">Company Name:</span> {selectedUser.company}</div>
+                                    {selectedUser.companyWebsite && <div><span className="font-medium">Website:</span> <a href={selectedUser.companyWebsite} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{selectedUser.companyWebsite}</a></div>}
+                                    {selectedUser.companyAddress && <div><span className="font-medium">Address:</span> {selectedUser.companyAddress}</div>}
+                                    {selectedUser.companyDescription && <div><span className="font-medium">Description:</span> {selectedUser.companyDescription}</div>}
+                                  </div>
+                                </div>
+                                <hr className="my-2 border-gray-200" />
+                                {/* Professional Section */}
+                                <div>
+                                  <div className="text-lg font-semibold mb-2">Professional</div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {selectedUser.recruiterRole && <div><span className="font-medium">Role:</span> {selectedUser.recruiterRole}</div>}
+                                    {selectedUser.linkedinProfile && <div><span className="font-medium">LinkedIn:</span> <a href={selectedUser.linkedinProfile} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{selectedUser.linkedinProfile}</a></div>}
+                                    {selectedUser.stinNumber && <div><span className="font-medium">STIN Number:</span> {selectedUser.stinNumber}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Right column: Documents and Certificates tables */}
+                          <div className="flex-1 min-w-[320px] space-y-8">
+                            {/* Documents Table */}
+                            <div className="bg-gray-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                              <div className="font-semibold text-lg mb-2">Documents</div>
+                              <table className="w-full border text-sm">
+                                <thead>
+                                  <tr className="bg-gray-100">
+                                    <th className="py-2 px-3 text-left">Name</th>
+                                    <th className="py-2 px-3 text-left">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedUser.documents.map((doc, idx) => (
+                                    <tr key={doc.id + '-' + doc.type + '-' + idx} className="border-t">
+                                      <td className="py-2 px-3">
+                                        <span className="font-medium">{doc.type}</span>: <a href="#" onClick={e => { e.preventDefault(); setSelectedDocumentToView(doc); }} className="text-blue-600 hover:underline cursor-pointer">{doc.name}</a>
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        <button
+                                          className={`px-3 py-1 rounded text-xs font-semibold ${doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' : doc.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}
+                                          onClick={() => handleToggleDocumentStatus(doc)}
+                                          disabled
+                                        >
+                                          {doc.status || 'PENDING'}
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {/* Certificates Table (students only) */}
+                            {isAdminStudentProfile(selectedUser) && (
+                              <div className="bg-gray-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                                <div className="font-semibold text-lg mb-2">Certificates</div>
+                                <table className="w-full border text-sm">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="py-2 px-3 text-left">Name</th>
+                                      <th className="py-2 px-3 text-left">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {selectedUser.certificates.map((cert, idx) => (
+                                      <tr key={cert.id + '-' + cert.name + '-' + idx} className="border-t">
+                                        <td className="py-2 px-3">
+                                          <a href="#" onClick={e => { e.preventDefault(); setSelectedDocumentToView(cert); }} className="text-blue-600 hover:underline cursor-pointer">{cert.name}</a>
+                                        </td>
+                                        <td className="py-2 px-3">
+                                          <button
+                                            className={`px-3 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700`}
+                                            onClick={() => handleToggleCertificateStatus(cert)}
+                                          >
+                                            Pending
+                                          </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                            )}
+                          </div>
+                        </div>
+                        <DialogClose asChild>
+                          <button className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors absolute top-4 right-4 shadow focus:outline-none focus:ring-2 focus:ring-blue-400 z-10" aria-label="Close">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </DialogClose>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </div>
             )}
@@ -663,58 +781,189 @@ export default function AdminPanel() {
                   <h2 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h2>
                   <p className="text-gray-600 mt-1">Platform insights and performance metrics</p>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Placeholder Charts */}
-                  <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">User Growth</h3>
-                    <div className="h-64 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <TrendingUp className="w-12 h-12 text-blue-600 mx-auto mb-2" />
-                        <p className="text-gray-600 font-medium">User Growth Chart</p>
-                        <p className="text-sm text-gray-500">Chart visualization would go here</p>
+                  {/* User Distribution Pie Chart */}
+                  <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col items-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">User Distribution</h3>
+                    <PieChart data={[students.length, recruiters.length]} colors={["#3b82f6", "#a78bfa"]} />
+                    <div className="flex justify-center gap-4 mt-2">
+                      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span> Students: {students.length}</span>
+                      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-purple-500"></span> Recruiters: {recruiters.length}</span>
                       </div>
                     </div>
+                  {/* Job Status Pie Chart */}
+                  <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col items-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Status Distribution</h3>
+                    <PieChart data={[
+                      jobs.filter(j => j.adminApprovalStatus === 'APPROVED').length,
+                      jobs.filter(j => j.adminApprovalStatus === 'PENDING' || !j.adminApprovalStatus).length,
+                      jobs.filter(j => j.adminApprovalStatus === 'REJECTED').length
+                    ]} colors={["#22c55e", "#facc15", "#ef4444"]} />
+                    <div className="flex justify-center gap-4 mt-2">
+                      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-green-500"></span> Approved</span>
+                      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-yellow-400"></span> Pending</span>
+                      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-red-500"></span> Rejected</span>
                   </div>
+                      </div>
+                  {/* Jobs per Status Bar Chart */}
+                  <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col items-center col-span-1 md:col-span-2">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Jobs per Status</h3>
+                    <BarChart
+                      data={[
+                        jobs.filter(j => j.adminApprovalStatus === 'APPROVED').length,
+                        jobs.filter(j => j.adminApprovalStatus === 'PENDING' || !j.adminApprovalStatus).length,
+                        jobs.filter(j => j.adminApprovalStatus === 'REJECTED').length
+                      ]}
+                      labels={["Approved", "Pending", "Rejected"]}
+                      colors={["#22c55e", "#facc15", "#ef4444"]}
+                    />
+                    </div>
+                  </div>
+                      </div>
+            )}
 
+            {/* Job Management Tab */}
+            {activeTab === "jobs" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Job Management</h2>
+                  <p className="text-gray-600 mt-1">View and manage all jobs. Approve or reject jobs as needed.</p>
+                </div>
                   <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Job Applications</h3>
-                    <div className="h-64 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <BarChart3 className="w-12 h-12 text-green-600 mx-auto mb-2" />
-                        <p className="text-gray-600 font-medium">Applications Chart</p>
-                        <p className="text-sm text-gray-500">Chart visualization would go here</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">User Distribution</h3>
-                    <div className="h-64 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <PieChart className="w-12 h-12 text-purple-600 mx-auto mb-2" />
-                        <p className="text-gray-600 font-medium">Distribution Chart</p>
-                        <p className="text-sm text-gray-500">Chart visualization would go here</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Platform Activity</h3>
-                    <div className="h-64 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <Activity className="w-12 h-12 text-orange-600 mx-auto mb-2" />
-                        <p className="text-gray-600 font-medium">Activity Chart</p>
-                        <p className="text-sm text-gray-500">Chart visualization would go here</p>
-                      </div>
-                    </div>
-                  </div>
+                  <table className="w-full border text-sm">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="py-2 px-3 text-left">Job Name</th>
+                        <th className="py-2 px-3 text-left">Company</th>
+                        <th className="py-2 px-3 text-left">Status</th>
+                        <th className="py-2 px-3 text-left">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {jobs.map((job: any) => (
+                        <tr key={job.id} className="border-t">
+                          <td className="py-2 px-3 font-medium">{job.title}</td>
+                          <td className="py-2 px-3">{job.companyName || (job.recruiter && job.recruiter.company) || '-'}</td>
+                          <td className="py-2 px-3">
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${job.adminApprovalStatus === 'APPROVED' ? 'bg-green-100 text-green-800' : job.adminApprovalStatus === 'REJECTED' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{job.adminApprovalStatus || 'PENDING'}</span>
+                          </td>
+                          <td className="py-2 px-3 space-x-2">
+                            <button
+                              className="px-3 py-1 rounded bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition-colors disabled:opacity-60"
+                              disabled={jobActionLoading === job.id || job.adminApprovalStatus === 'APPROVED' || job.adminApprovalStatus === 'REJECTED'}
+                              onClick={async () => {
+                                setJobActionLoading(job.id);
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  const res = await fetch(`http://localhost:8080/api/recruiter/jobs/admin/approve/${job.id}?status=APPROVED`, {
+                                    method: 'PATCH',
+                                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                                  });
+                                  if (!res.ok) throw new Error('Failed to approve');
+                                  await fetchJobs();
+                                  alert('Job approved successfully!');
+                                } catch (err) {
+                                  alert('Failed to approve: ' + (err as any).message);
+                                } finally {
+                                  setJobActionLoading(null);
+                                }
+                              }}
+                            >
+                              {jobActionLoading === job.id ? 'Approving...' : 'Approve'}
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
+                              disabled={jobActionLoading === job.id || job.adminApprovalStatus === 'REJECTED' || job.adminApprovalStatus === 'APPROVED'}
+                              onClick={async () => {
+                                setJobActionLoading(job.id);
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  const res = await fetch(`http://localhost:8080/api/recruiter/jobs/admin/approve/${job.id}?status=REJECTED`, {
+                                    method: 'PATCH',
+                                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                                  });
+                                  if (!res.ok) throw new Error('Failed to reject');
+                                  await fetchJobs();
+                                  alert('Job rejected successfully!');
+                                } catch (err) {
+                                  alert('Failed to reject: ' + (err as any).message);
+                                } finally {
+                                  setJobActionLoading(null);
+                                }
+                              }}
+                            >
+                              {jobActionLoading === job.id ? 'Rejecting...' : 'Reject'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
+      {/* Document Viewer Modal */}
+      {selectedDocumentToView && (
+        <Dialog open={!!selectedDocumentToView} onOpenChange={open => { if (!open) setSelectedDocumentToView(null); }}>
+          <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-y-auto p-0">
+            <DialogClose asChild>
+              <button className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors absolute top-4 right-4 shadow focus:outline-none focus:ring-2 focus:ring-blue-400 z-10" aria-label="Close">
+                <X className="h-5 w-5" />
+              </button>
+            </DialogClose>
+            <div className="p-4">
+              <div className="font-semibold text-lg mb-4">Viewing: {selectedDocumentToView.name}</div>
+              {selectedDocumentToView.url &&
+                (selectedDocumentToView.url.endsWith('.pdf') ? (
+                  <iframe src={selectedDocumentToView.url} title="Document Viewer" className="w-full min-h-[60vh] rounded border" />
+                ) : (
+                  <img src={selectedDocumentToView.url} alt={selectedDocumentToView.name} className="max-w-full max-h-[70vh] rounded border mx-auto" />
+                ))
+              }
+              <div className="flex justify-end gap-4 mt-6">
+                <button
+                  className="px-5 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors shadow disabled:opacity-60 flex items-center justify-center"
+                  onClick={() => handleApproveDocument(selectedDocumentToView)}
+                  disabled={docActionLoading}
+                >
+                  {docActionLoading ? (
+                    <span className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Approving...
+                    </span>
+                  ) : (
+                    "Approve"
+                  )}
+                </button>
+                <button
+                  className="px-5 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors shadow disabled:opacity-60 flex items-center justify-center"
+                  onClick={() => handleRejectDocument(selectedDocumentToView)}
+                  disabled={docActionLoading}
+                >
+                  {docActionLoading ? (
+                    <span className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Rejecting...
+                    </span>
+                  ) : (
+                    "Reject"
+                  )}
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
+
