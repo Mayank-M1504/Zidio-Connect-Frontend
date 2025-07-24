@@ -404,6 +404,7 @@ export default function RecruiterDashboard() {
   const [showTooltip, setShowTooltip] = useState(false);
 
   const handleLogout = () => {
+    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     localStorage.removeItem('token');
     window.location.href = '/';
   };
@@ -464,15 +465,12 @@ export default function RecruiterDashboard() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                <Bell className="w-5 h-5" />
-              </button>
               <button
                 onClick={handleLogout}
-                className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors"
+                className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-red-50"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Logout</span>
+                <span className="font-medium">Logout</span>
               </button>
             </div>
           </div>
@@ -1260,60 +1258,71 @@ export default function RecruiterDashboard() {
 
       {selectedApplicant && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-2xl relative">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 w-full max-w-2xl relative border border-gray-200 animate-in fade-in slide-in-from-bottom duration-300">
             <button
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-2xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
               onClick={() => setSelectedApplicant(null)}
+              aria-label="Close"
             >
               &times;
             </button>
-            <h2 className="text-2xl font-bold mb-6">Application Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 border-b pb-2">Application Details</h2>
+            {/* Skills Section (above Documents) */}
+            {selectedApplicant.skills && selectedApplicant.skills.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-1 text-blue-700">Skills</h3>
+                <div className="flex flex-wrap gap-2">
+                  {selectedApplicant.skills.map((skill: string, idx: number) => (
+                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Profile Section */}
               <div>
-                <h3 className="text-lg font-semibold mb-2 border-l-4 border-blue-500 pl-2">Profile</h3>
-                <div className="mb-2">
-                  <label className="block text-xs text-gray-500">Name</label>
-                  <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.studentName || '-'}</div>
+                <h3 className="text-lg font-semibold mb-2 text-blue-700">Profile</h3>
+                <div className="space-y-2">
+                  <div>
+                    <span className="block text-xs text-gray-500 mb-0.5">Name</span>
+                    <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.studentName || '-'}</span>
                 </div>
-                <div className="mb-2">
-                  <label className="block text-xs text-gray-500">Email</label>
-                  <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.studentEmail || '-'}</div>
+                  <div>
+                    <span className="block text-xs text-gray-500 mb-0.5">Email</span>
+                    <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.studentEmail || '-'}</span>
                 </div>
-                {selectedApplicant.phone && (
-                  <div className="mb-2">
-                    <label className="block text-xs text-gray-500">Phone</label>
-                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.phone}</div>
-                  </div>
-                )}
                 {selectedApplicant.college && (
-                  <div className="mb-2">
-                    <label className="block text-xs text-gray-500">College</label>
-                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.college}</div>
+                    <div>
+                      <span className="block text-xs text-gray-500 mb-0.5">College</span>
+                      <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.college}</span>
                   </div>
                 )}
                 {selectedApplicant.course && (
-                  <div className="mb-2">
-                    <label className="block text-xs text-gray-500">Course</label>
-                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.course}</div>
+                    <div>
+                      <span className="block text-xs text-gray-500 mb-0.5">Course</span>
+                      <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.course}</span>
                   </div>
                 )}
                 {selectedApplicant.yearOfStudy && (
-                  <div className="mb-2">
-                    <label className="block text-xs text-gray-500">Year</label>
-                    <div className="bg-gray-100 rounded px-3 py-2">{selectedApplicant.yearOfStudy}</div>
+                    <div>
+                      <span className="block text-xs text-gray-500 mb-0.5">Year</span>
+                      <span className="block bg-gray-50 rounded px-3 py-1.5 text-gray-900 font-medium">{selectedApplicant.yearOfStudy}</span>
                   </div>
                 )}
+                </div>
               </div>
               {/* Documents Section */}
               <div>
-                <h3 className="text-lg font-semibold mb-2 border-l-4 border-blue-500 pl-2">Documents</h3>
-                <div className="mb-2">
-                  <label className="block text-xs text-gray-500">Resume</label>
-                  <div className="bg-gray-100 rounded px-3 py-2 flex items-center gap-2">
+                <h3 className="text-lg font-semibold mb-2 text-blue-700">Documents</h3>
+                <div className="space-y-2">
+                  <div>
+                    <span className="block text-xs text-gray-500 mb-0.5">Resume</span>
+                    <div className="flex items-center gap-3 bg-gray-50 rounded px-3 py-1.5">
                     {selectedApplicant.resume?.url ? (
                       <>
-                        <span>{selectedApplicant.resume.name || 'Resume'}</span>
+                          <span className="font-bold text-base text-gray-900 min-w-[90px] text-left">{selectedApplicant.resume.name || 'Resume'}</span>
                         <button type="button" title="View Resume" onClick={() => {
                           const doc = selectedApplicant.resume;
                           setSelectedDocument({
@@ -1322,21 +1331,21 @@ export default function RecruiterDashboard() {
                             contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
                           });
                           setShowDocumentModal(true);
-                        }}>
-                          <Eye className="w-4 h-4 text-blue-600 inline-block align-middle hover:text-blue-800" />
+                          }} className="text-blue-600 hover:text-blue-800 ml-2">
+                            <Eye className="w-4 h-4 align-middle" />
                         </button>
                       </>
                     ) : (
-                      'Not submitted'
+                        <span className="text-gray-400">Not submitted</span>
                     )}
                   </div>
                 </div>
-                <div className="mb-2">
-                  <label className="block text-xs text-gray-500">Marksheet</label>
-                  <div className="bg-gray-100 rounded px-3 py-2 flex items-center gap-2">
+                  <div>
+                    <span className="block text-xs text-gray-500 mb-0.5">Marksheet</span>
+                    <div className="flex items-center gap-3 bg-gray-50 rounded px-3 py-1.5">
                     {selectedApplicant.marksheet?.url ? (
                       <>
-                        <span>{selectedApplicant.marksheet.name || 'Marksheet'}</span>
+                          <span className="font-bold text-base text-gray-900 min-w-[90px] text-left">{selectedApplicant.marksheet.name || 'Marksheet'}</span>
                         <button type="button" title="View Marksheet" onClick={() => {
                           const doc = selectedApplicant.marksheet;
                           setSelectedDocument({
@@ -1345,23 +1354,23 @@ export default function RecruiterDashboard() {
                             contentType: doc.contentType || inferContentTypeFromUrl(doc.url),
                           });
                           setShowDocumentModal(true);
-                        }}>
-                          <Eye className="w-4 h-4 text-blue-600 inline-block align-middle hover:text-blue-800" />
+                          }} className="text-blue-600 hover:text-blue-800 ml-2">
+                            <Eye className="w-4 h-4 align-middle" />
                         </button>
                       </>
                     ) : (
-                      'Not submitted'
+                        <span className="text-gray-400">Not submitted</span>
                     )}
                   </div>
                 </div>
-                <div className="mb-2">
-                  <label className="block text-xs text-gray-500">Certificates</label>
-                  <div className="bg-gray-100 rounded px-3 py-2">
+                  <div>
+                    <span className="block text-xs text-gray-500 mb-0.5">Certificates</span>
+                    <div className="bg-gray-50 rounded px-3 py-1.5">
                     {Array.isArray(selectedApplicant.certificates) && selectedApplicant.certificates.length > 0 ? (
-                      <ul className="list-disc ml-6">
+                        <ul className="space-y-1">
                         {selectedApplicant.certificates.map((cert: any, idx: number) => (
-                          <li key={cert.id} className="flex items-center gap-2">
-                            <span>{cert.name || 'Certificate'}</span>
+                            <li key={cert.id} className="flex items-center gap-3">
+                              <span className="font-bold text-base text-gray-900 text-left">{cert.name || 'Certificate'}</span>
                             <button type="button" title="View Certificate" onClick={() => {
                               setSelectedDocument({
                                 ...cert,
@@ -1369,24 +1378,39 @@ export default function RecruiterDashboard() {
                                 contentType: cert.contentType || inferContentTypeFromUrl(cert.url),
                               });
                               setShowDocumentModal(true);
-                            }}>
-                              <Eye className="w-4 h-4 text-blue-600 inline-block align-middle hover:text-blue-800" />
+                              }} className="text-blue-600 hover:text-blue-800 ml-2">
+                                <Eye className="w-4 h-4 align-middle" />
                             </button>
-                            {cert.status && <span className="ml-2 text-xs text-gray-500">({cert.status})</span>}
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      'None'
+                        <span className="text-gray-400">None</span>
                     )}
                   </div>
                 </div>
               </div>
             </div>
+            </div>
+            {/* Q&A Section */}
+            {(selectedApplicant?.questionForApplicant || selectedApplicant?.answerForRecruiter) && (
+              <div className="mt-6 flex flex-col gap-2">
+                {selectedApplicant?.questionForApplicant && (
+                  <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 text-base text-gray-900">
+                    {selectedApplicant.questionForApplicant}
+                  </div>
+                )}
+                {selectedApplicant?.answerForRecruiter && (
+                  <div className="border border-green-200 bg-green-50 rounded-lg p-3 text-base text-gray-900">
+                    {selectedApplicant.answerForRecruiter}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Action Buttons */}
-            <div className="flex justify-end gap-4 mt-8">
+            <div className="flex justify-end gap-4 mt-6">
               <button
-                className="px-6 py-2 rounded bg-red-500 text-white font-semibold hover:bg-red-600 transition disabled:opacity-50"
+                className="px-6 py-2 rounded-lg bg-red-500 text-white font-semibold hover:bg-red-600 transition disabled:opacity-50 shadow-sm"
                 disabled={statusUpdating}
                 onClick={() => handleStatusUpdate("REJECTED")}
               >
@@ -1394,7 +1418,7 @@ export default function RecruiterDashboard() {
               </button>
               {selectedApplicant.status !== 'SHORTLISTED' && (
                 <button
-                  className="px-6 py-2 rounded bg-green-500 text-white font-semibold hover:bg-green-600 transition disabled:opacity-50"
+                  className="px-6 py-2 rounded-lg bg-green-500 text-white font-semibold hover:bg-green-600 transition disabled:opacity-50 shadow-sm"
                   disabled={statusUpdating}
                   onClick={() => handleStatusUpdate("SHORTLISTED")}
                 >

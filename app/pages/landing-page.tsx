@@ -26,7 +26,6 @@ import {
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
-  const [currentCompany, setCurrentCompany] = useState(0)
   const [isVisible, setIsVisible] = useState({})
   const router = useRouter();
 
@@ -90,18 +89,6 @@ export default function LandingPage() {
     },
   ]
 
-  // Top Companies Data
-  const topCompanies = [
-    { name: "Google", logo: "🔍", employees: "150K+", rating: 4.8, openings: 45 },
-    { name: "Microsoft", logo: "🪟", employees: "220K+", rating: 4.7, openings: 38 },
-    { name: "Amazon", logo: "📦", employees: "1.5M+", rating: 4.5, openings: 67 },
-    { name: "Apple", logo: "🍎", employees: "164K+", rating: 4.9, openings: 23 },
-    { name: "Meta", logo: "📘", employees: "87K+", rating: 4.6, openings: 29 },
-    { name: "Netflix", logo: "🎬", employees: "12K+", rating: 4.8, openings: 15 },
-    { name: "Tesla", logo: "⚡", employees: "127K+", rating: 4.4, openings: 34 },
-    { name: "Spotify", logo: "🎵", employees: "9K+", rating: 4.7, openings: 18 },
-  ]
-
   // Customer Reviews/Testimonials
   const testimonials = [
     {
@@ -138,77 +125,11 @@ export default function LandingPage() {
     },
   ]
 
-  // Trending Jobs
-  const trendingJobs = [
-    {
-      title: "AI/ML Engineer",
-      company: "OpenAI",
-      location: "Remote",
-      salary: "₹25-40 LPA",
-      type: "Full-time",
-      trending: "+45%",
-      logo: "🤖",
-    },
-    {
-      title: "Full Stack Developer",
-      company: "Stripe",
-      location: "Bangalore",
-      salary: "₹18-30 LPA",
-      type: "Full-time",
-      trending: "+38%",
-      logo: "💳",
-    },
-    {
-      title: "Data Scientist",
-      company: "Uber",
-      location: "Hyderabad",
-      salary: "₹20-35 LPA",
-      type: "Full-time",
-      trending: "+42%",
-      logo: "🚗",
-    },
-    {
-      title: "Product Designer",
-      company: "Figma",
-      location: "Mumbai",
-      salary: "₹15-25 LPA",
-      type: "Full-time",
-      trending: "+33%",
-      logo: "🎨",
-    },
-    {
-      title: "DevOps Engineer",
-      company: "Docker",
-      location: "Pune",
-      salary: "₹22-38 LPA",
-      type: "Full-time",
-      trending: "+40%",
-      logo: "🐳",
-    },
-    {
-      title: "Cybersecurity Analyst",
-      company: "CrowdStrike",
-      location: "Delhi",
-      salary: "₹16-28 LPA",
-      type: "Full-time",
-      trending: "+35%",
-      logo: "🔒",
-    },
-  ]
-
   // Auto-rotate testimonials
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTestimonial((prev) => (prev + 1) % testimonials.length)
     }, 5000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Auto-rotate companies
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentCompany((prev) => (prev + 4) % topCompanies.length)
-    }, 3000)
     return () => clearInterval(interval)
   }, [])
 
@@ -450,107 +371,6 @@ export default function LandingPage() {
                   {feature.title}
                 </h3>
                 <p className="text-gray-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Top Companies Section */}
-      <section
-        id="companies"
-        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-gray-50 to-blue-50"
-        data-animate
-      >
-        <div className="max-w-7xl mx-auto">
-          <div
-            className={`text-center mb-16 transition-all duration-1000 ${isVisible.companies ? "animate-in fade-in slide-in-from-top" : "opacity-0 translate-y-10"}`}
-          >
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Top Companies Hiring</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Connect with industry leaders and start your dream career
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-6 mb-12">
-            {topCompanies.slice(currentCompany, currentCompany + 4).map((company, index) => (
-              <div
-                key={index}
-                className={`bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-500 border border-gray-100 group ${isVisible.companies ? `animate-in fade-in slide-in-from-bottom delay-${index * 100}` : "opacity-0 translate-y-10"}`}
-              >
-                <div className="text-center">
-                  <div className="text-4xl mb-3 transform group-hover:scale-110 transition-transform duration-300">
-                    {company.logo}
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors duration-300">
-                    {company.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-2">{company.employees} employees</p>
-                  <div className="flex items-center justify-center mb-2">
-                    <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                    <span className="text-sm text-gray-600 ml-1">{company.rating}</span>
-                  </div>
-                  <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1 rounded-full text-sm">
-                    {company.openings} openings
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Trending Jobs Section */}
-      <section id="jobs" className="py-20 px-4 sm:px-6 lg:px-8 bg-white" data-animate>
-        <div className="max-w-7xl mx-auto">
-          <div
-            className={`text-center mb-16 transition-all duration-1000 ${isVisible.jobs ? "animate-in fade-in slide-in-from-top" : "opacity-0 translate-y-10"}`}
-          >
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Trending Jobs</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Discover the most in-demand positions in the market
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {trendingJobs.map((job, index) => (
-              <div
-                key={index}
-                className={`bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-500 border border-gray-100 group ${isVisible.jobs ? `animate-in fade-in slide-in-from-bottom delay-${index * 100}` : "opacity-0 translate-y-10"}`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="text-3xl transform group-hover:scale-110 transition-transform duration-300">
-                    {job.logo}
-                  </div>
-                  <div className="flex items-center bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    {job.trending}
-                  </div>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors duration-300">
-                  {job.title}
-                </h3>
-                <p className="text-gray-600 mb-3 flex items-center">
-                  <Building2 className="w-4 h-4 mr-1" />
-                  {job.company}
-                </p>
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Location className="w-4 h-4 mr-2" />
-                    {job.location}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    {job.salary}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Clock className="w-4 h-4 mr-2" />
-                    {job.type}
-                  </div>
-                </div>
-                <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-lg hover:shadow-lg transform hover:scale-105 transition-all duration-300">
-                  Apply Now
-                </button>
               </div>
             ))}
           </div>
